@@ -24,6 +24,7 @@ const NAV_LINKS = [
   { label: "Schools",  to: "/admin/schools",     roles: ["admin", "super_admin"] },
   { label: "Degrees",  to: "/admin/degrees",     roles: ["admin", "super_admin"] },
   { label: "Courses",  to: "/admin/courses",     roles: ["admin", "super_admin"] },
+  { label: "Users",    to: "/admin/users",       roles: ["admin", "super_admin"] },
   { label: "Exams",    to: "/lecturer/exams",    roles: ["lecturer", "admin", "super_admin"] },
   { label: "My Exams", to: "/student/dashboard", roles: ["student"] },
 ];

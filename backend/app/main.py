@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from app.api import auth, schools
-from app.api import degrees, courses, exams, questions, attempts, submissions, student
+from app.api import degrees, courses, exams, questions, attempts, submissions, student, users
 from app.core.config import settings
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)
@@ -25,6 +25,7 @@ app.include_router(questions.router)
 app.include_router(attempts.router)
 app.include_router(submissions.router)
 app.include_router(student.router)
+app.include_router(users.router)
 
 
 @app.get("/", include_in_schema=False)

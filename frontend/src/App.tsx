@@ -8,6 +8,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { SchoolsPage } from "./pages/admin/SchoolsPage";
 import { DegreesPage } from "./pages/admin/DegreesPage";
 import { CoursesPage } from "./pages/admin/CoursesPage";
+import { UsersPage } from "./pages/admin/UsersPage";
 
 import { ExamsPage } from "./pages/lecturer/ExamsPage";
 import { ExamBuilderPage } from "./pages/lecturer/ExamBuilderPage";
@@ -31,6 +32,7 @@ export function App() {
         <Route path="/admin/schools" element={<ProtectedRoute roles={ADMIN}><SchoolsPage /></ProtectedRoute>} />
         <Route path="/admin/degrees" element={<ProtectedRoute roles={ADMIN}><DegreesPage /></ProtectedRoute>} />
         <Route path="/admin/courses" element={<ProtectedRoute roles={ADMIN}><CoursesPage /></ProtectedRoute>} />
+        <Route path="/admin/users" element={<ProtectedRoute roles={ADMIN}><UsersPage /></ProtectedRoute>} />
 
         {/* Lecturer */}
         <Route path="/lecturer/exams" element={<ProtectedRoute roles={LECTURER}><ExamsPage /></ProtectedRoute>} />

@@ -4,7 +4,8 @@ import { Layout } from "../../components/Layout";
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, Select } from "../../components/ui";
 import { listSchools } from "../../api/schools";
 import { listDegrees } from "../../api/degrees";
-import { createCourse, enrollStudent, listCourses } from "../../api/courses";
+import { createCourse, enrollStudent, listCourses, listStudents } from "../../api/courses";
+import type { StudentSummary } from "../../api/courses";
 import type { Course, Degree, School } from "../../api/types";
 
 export function CoursesPage() {
@@ -16,9 +17,11 @@ export function CoursesPage() {
   const [form, setForm] = useState({ name: "", code: "", lecturer_id: "" });
   const [enrollCourseId, setEnrollCourseId] = useState("");
   const [studentId, setStudentId] = useState("");
+  const [students, setStudents] = useState<StudentSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => { listSchools().then(setSchools); }, []);
+  useEffect(() => { listStudents().then(setStudents).catch(() => {}); }, []);
   useEffect(() => {
     if (!selectedSchool) { setDegrees([]); setSelectedDegree(""); return; }
     listDegrees(selectedSchool).then(setDegrees);
@@ -139,13 +142,17 @@ export function CoursesPage() {
                 action={<button onClick={() => setEnrollCourseId("")} className="text-slate-400 hover:text-slate-600">✕</button>}
               />
               <form onSubmit={handleEnroll} className="flex gap-2">
-                <Input
-                  placeholder="Paste student user ID"
+                <Select
+                  placeholder="— select student —"
                   value={studentId}
                   onChange={(e) => setStudentId(e.target.value)}
                   className="flex-1"
-                />
-                <Button type="submit" variant="success">Enrol</Button>
+                >
+                  {students.map((s) => (
+                    <option key={s.id} value={s.id}>{s.email}</option>
+                  ))}
+                </Select>
+                <Button type="submit" variant="success" disabled={!studentId}>Enrol</Button>
               </form>
             </Card>
           )}

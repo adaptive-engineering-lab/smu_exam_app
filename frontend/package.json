@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.4.0",
+    "@react-oauth/google": "^0.13.4",
     "@tailwindcss/vite": "^4.2.1",
     "idb": "^8.0.3",
     "react": "^18.3.1",

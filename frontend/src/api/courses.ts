@@ -1,6 +1,10 @@
 import { apiFetch } from "./client";
 import type { Course, Enrollment } from "./types";
 
+export type StudentSummary = { id: string; email: string };
+
+export const listStudents = () => apiFetch<StudentSummary[]>("/users/students");
+
 export const listCourses = (degreeId: string) =>
   apiFetch<Course[]>(`/courses/by-degree/${degreeId}`);
 

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Layout } from "../../components/Layout";
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader } from "../../components/ui";
-import { createQuestion, deleteQuestion, getExam, listQuestions } from "../../api/exams";
+import { createQuestion, deleteQuestion, getExam, listQuestions, updateQuestion } from "../../api/exams";
 import type { Exam, Question } from "../../api/types";
 
 type QType = "mcq" | "true_false" | "short_answer";
@@ -26,6 +26,8 @@ export function ExamBuilderPage() {
   const [draft, setDraft] = useState(emptyDraft());
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [editDraft, setEditDraft] = useState(emptyDraft());
 
   useEffect(() => {
     if (!examId) return;
@@ -73,6 +75,47 @@ export function ExamBuilderPage() {
       toast.success("Question deleted");
     } catch {
       toast.error("Failed to delete question");
+    }
+  }
+
+  function startEdit(q: Question) {
+    setEditingQuestion(q);
+    setEditDraft({
+      text: q.text,
+      question_type: q.question_type as QType,
+      points: q.points,
+      options: q.options.map((o) => ({ text: o.text, is_correct: o.is_correct })),
+    });
+  }
+
+  function setEditType(t: QType) {
+    if (t === "true_false") {
+      setEditDraft((d) => ({ ...d, question_type: t, options: [{ text: "True", is_correct: false }, { text: "False", is_correct: false }] }));
+    } else if (t === "short_answer") {
+      setEditDraft((d) => ({ ...d, question_type: t, options: [] }));
+    } else {
+      setEditDraft((d) => ({ ...d, question_type: t, options: d.options.length >= 2 ? d.options : [{ text: "", is_correct: false }, { text: "", is_correct: false }] }));
+    }
+  }
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingQuestion || !editDraft.text.trim()) return;
+    setSaving(true);
+    try {
+      const updated = await updateQuestion(editingQuestion.id, {
+        text: editDraft.text,
+        question_type: editDraft.question_type,
+        points: editDraft.points,
+        options: editDraft.options.map((o, i) => ({ ...o, order_index: i })),
+      });
+      setQuestions((prev) => prev.map((q) => q.id === updated.id ? updated : q));
+      setEditingQuestion(null);
+      toast.success("Question updated");
+    } catch {
+      toast.error("Failed to update question");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -172,7 +215,82 @@ export function ExamBuilderPage() {
         </div>
 
         {/* Questions list */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-4">
+          {editingQuestion && (
+            <Card>
+              <CardHeader title={`Edit Question`} action={
+                <button onClick={() => setEditingQuestion(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+              } />
+              <form onSubmit={handleSaveEdit} className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Type</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {(["mcq", "true_false", "short_answer"] as QType[]).map((t) => (
+                      <button key={t} type="button" onClick={() => setEditType(t)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors
+                          ${editDraft.question_type === t
+                            ? "bg-indigo-600 text-white border-indigo-600"
+                            : "bg-white text-slate-600 border-slate-300 hover:border-indigo-400"}`}>
+                        {TYPE_LABELS[t]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Input label="Points" type="number" min={1} value={editDraft.points}
+                  onChange={(e) => setEditDraft((d) => ({ ...d, points: +e.target.value }))} />
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Question text</label>
+                  <textarea
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    rows={3} value={editDraft.text}
+                    onChange={(e) => setEditDraft((d) => ({ ...d, text: e.target.value }))} required
+                  />
+                </div>
+                {editDraft.question_type !== "short_answer" && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
+                      Options {editDraft.question_type === "mcq" ? "(check correct)" : "(select correct)"}
+                    </p>
+                    <div className="space-y-2">
+                      {editDraft.options.map((opt, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <input type={editDraft.question_type === "mcq" ? "checkbox" : "radio"} name="edit-correct"
+                            checked={opt.is_correct} className="accent-indigo-600 shrink-0"
+                            onChange={() => setEditDraft((d) => ({
+                              ...d,
+                              options: d.options.map((o, j) =>
+                                editDraft.question_type === "true_false"
+                                  ? { ...o, is_correct: j === i }
+                                  : j === i ? { ...o, is_correct: !o.is_correct } : o
+                              ),
+                            }))}
+                          />
+                          <input
+                            className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            placeholder={`Option ${i + 1}`} value={opt.text}
+                            disabled={editDraft.question_type === "true_false"}
+                            onChange={(e) => setEditDraft((d) => ({ ...d, options: d.options.map((o, j) => j === i ? { ...o, text: e.target.value } : o) }))}
+                          />
+                          {editDraft.question_type === "mcq" && editDraft.options.length > 2 && (
+                            <button type="button" onClick={() => setEditDraft((d) => ({ ...d, options: d.options.filter((_, j) => j !== i) }))}
+                              className="text-red-400 hover:text-red-600 text-sm">✕</button>
+                          )}
+                        </div>
+                      ))}
+                      {editDraft.question_type === "mcq" && (
+                        <button type="button" onClick={() => setEditDraft((d) => ({ ...d, options: [...d.options, { text: "", is_correct: false }] }))}
+                          className="text-xs text-indigo-600 hover:underline font-medium">+ Add option</button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <Button type="submit" loading={saving} className="flex-1">Save Changes</Button>
+                  <Button type="button" variant="secondary" onClick={() => setEditingQuestion(null)}>Cancel</Button>
+                </div>
+              </form>
+            </Card>
+          )}
           <Card padding={false}>
             <div className="px-5 py-4 border-b border-slate-100">
               <h2 className="text-base font-semibold text-slate-900">Questions ({questions.length})</h2>
@@ -191,6 +309,7 @@ export function ExamBuilderPage() {
                       <div className="flex items-center gap-2 shrink-0">
                         <Badge color="slate">{TYPE_LABELS[q.question_type as QType]}</Badge>
                         <Badge color="indigo">{q.points}pt</Badge>
+                        <button onClick={() => startEdit(q)} className="text-xs text-indigo-500 hover:text-indigo-700 font-medium">Edit</button>
                         <button onClick={() => handleDelete(q.id)} className="text-xs text-red-400 hover:text-red-600 font-medium">Delete</button>
                       </div>
                     </div>

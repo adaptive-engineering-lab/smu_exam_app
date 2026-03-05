@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
+    # OAuth
+    google_client_id: str = ""
+
     # Storage
     storage_dir: str = "./submissions"
     use_azure_storage: bool = False

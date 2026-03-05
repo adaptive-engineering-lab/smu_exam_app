@@ -9,8 +9,15 @@ export const login = (email: string, password: string) =>
 
 export const getMe = () => apiFetch<User>("/auth/me");
 
-export const register = (email: string, password: string, role: string) =>
+export const register = (email: string, role: string) =>
   apiFetch<User>("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ email, password, role }),
+    body: JSON.stringify({ email, role }),
   });
+
+export const oauthGoogle = (id_token: string) =>
+  apiFetch<{ access_token: string }>("/auth/oauth/google", {
+    method: "POST",
+    body: JSON.stringify({ id_token }),
+  });
+
