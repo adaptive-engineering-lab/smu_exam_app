@@ -1,3 +1,5 @@
+import json
+import random
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db, require_student
 from app.models.answer import Answer
 from app.models.attempt import ExamAttempt
+from app.models.course import Course
 from app.models.exam import Exam
 from app.models.option import Option
 from app.models.question import Question
@@ -22,6 +25,12 @@ def begin_attempt(exam_id: str, db: Session = Depends(get_db), user=Depends(requ
     if not exam:
         raise HTTPException(404, "Exam not found or not published")
 
+    now = datetime.now(timezone.utc)
+    if exam.available_from and now < exam.available_from:
+        raise HTTPException(403, "Exam has not started yet")
+    if exam.available_until and now > exam.available_until:
+        raise HTTPException(403, "Exam window has closed")
+
     existing = db.query(ExamAttempt).filter(
         ExamAttempt.exam_id == exam_id,
         ExamAttempt.student_id == user.id,
@@ -31,7 +40,31 @@ def begin_attempt(exam_id: str, db: Session = Depends(get_db), user=Depends(requ
             raise HTTPException(409, "Exam already submitted")
         return existing
 
-    attempt = ExamAttempt(exam_id=exam_id, student_id=user.id)
+    # Compute shuffle orders for the new attempt
+    questions = db.query(Question).filter(Question.exam_id == exam_id).order_by(Question.order_index).all()
+    question_order = None
+    option_orders = None
+
+    if exam.shuffle_questions and questions:
+        q_ids = [q.id for q in questions]
+        random.shuffle(q_ids)
+        question_order = json.dumps(q_ids)
+
+    if exam.shuffle_options and questions:
+        o_map: dict[str, list[str]] = {}
+        for q in questions:
+            options = db.query(Option).filter(Option.question_id == q.id).order_by(Option.order_index).all()
+            o_ids = [o.id for o in options]
+            random.shuffle(o_ids)
+            o_map[q.id] = o_ids
+        option_orders = json.dumps(o_map)
+
+    attempt = ExamAttempt(
+        exam_id=exam_id,
+        student_id=user.id,
+        question_order=question_order,
+        option_orders=option_orders,
+    )
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
@@ -49,9 +82,20 @@ def get_attempt(attempt_id: str, db: Session = Depends(get_db), user=Depends(get
     exam = db.query(Exam).filter(Exam.id == attempt.exam_id).first()
     questions = db.query(Question).filter(Question.exam_id == exam.id).order_by(Question.order_index).all()
 
+    # Apply stored question order if present
+    if attempt.question_order:
+        order_map = {qid: i for i, qid in enumerate(json.loads(attempt.question_order))}
+        questions = sorted(questions, key=lambda q: order_map.get(q.id, 999))
+
+    stored_option_orders: dict[str, list[str]] = json.loads(attempt.option_orders) if attempt.option_orders else {}
+
     question_responses = []
     for q in questions:
         options = db.query(Option).filter(Option.question_id == q.id).order_by(Option.order_index).all()
+        # Apply stored option order if present
+        if q.id in stored_option_orders:
+            opt_order = {oid: i for i, oid in enumerate(stored_option_orders[q.id])}
+            options = sorted(options, key=lambda o: opt_order.get(o.id, 999))
         # Hide is_correct from students
         option_resp = [
             OptionResponse(
@@ -143,6 +187,9 @@ def submit_attempt(attempt_id: str, db: Session = Depends(get_db), user=Depends(
             Question.exam_id == attempt.exam_id
         ).order_by(Question.order_index).all()
         exam = db.query(Exam).filter(Exam.id == attempt.exam_id).first()
+        course = db.query(Course).filter(Course.id == exam.course_id).first()
+        lecturer_id = course.lecturer_id if course else None
+        lecturer = db.query(User).filter(User.id == lecturer_id).first() if lecturer_id else None
 
         answer_map = {a.question_id: a for a in answers}
         option_map = {}
@@ -151,8 +198,11 @@ def submit_attempt(attempt_id: str, db: Session = Depends(get_db), user=Depends(
                 option_map[o.id] = o.text
 
         pdf_bytes = generate_submission_pdf(
+            student_name=user.name,
             student_email=user.email,
             exam=exam,
+            course=course,
+            lecturer=lecturer,
             attempt=attempt,
             questions=questions,
             answer_map=answer_map,
@@ -161,8 +211,9 @@ def submit_attempt(attempt_id: str, db: Session = Depends(get_db), user=Depends(
         path = save_pdf(attempt.id, pdf_bytes)
         attempt.pdf_path = path
         db.commit()
-    except Exception:
-        pass  # PDF failure should not block submission
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("PDF generation failed for attempt %s: %s", attempt_id, e)
 
     db.refresh(attempt)
     return attempt

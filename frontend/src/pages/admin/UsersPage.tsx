@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Layout } from "../../components/Layout";
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, Select } from "../../components/ui";
-import { listUsers, createUser, deleteUser } from "../../api/users";
+import { listUsers, createUser, deleteUser, setUserPassword, updateUser } from "../../api/users";
+import { getRole } from "../../components/ProtectedRoute";
 import type { User } from "../../api/types";
 
 type RoleFilter = "all" | "student" | "lecturer" | "admin";
@@ -21,30 +22,86 @@ const TABS: { label: string; value: RoleFilter }[] = [
   { label: "Admins", value: "admin" },
 ];
 
+function getCurrentUserId(): string | null {
+  const token = localStorage.getItem("access_token");
+  if (!token) return null;
+  try { return JSON.parse(atob(token.split(".")[1])).sub ?? null; } catch { return null; }
+}
+
 export function UsersPage() {
+  const currentRole = getRole();
+  const currentUserId = getCurrentUserId();
   const [users, setUsers] = useState<User[]>([]);
   const [tab, setTab] = useState<RoleFilter>("all");
-  const [form, setForm] = useState({ email: "", role: "student" });
+  const [form, setForm] = useState({ email: "", name: "", role: "student", password: "" });
   const [loading, setLoading] = useState(false);
+  const [resetUserId, setResetUserId] = useState<string | null>(null);
+  const [resetPw, setResetPw] = useState({ newPassword: "", confirm: "" });
+  const [resetLoading, setResetLoading] = useState(false);
+  const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", role: "" });
+  const [editLoading, setEditLoading] = useState(false);
 
   useEffect(() => {
     listUsers().then(setUsers).catch(() => toast.error("Failed to load users"));
   }, []);
 
-  const visible = tab === "all" ? users : users.filter((u) => u.role === tab);
+  const [search, setSearch] = useState("");
+
+  const visible = (tab === "all" ? users : users.filter((u) => u.role === tab)).filter((u) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return u.email.toLowerCase().includes(q) || (u.name ?? "").toLowerCase().includes(q);
+  });
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
-      const user = await createUser(form.email, form.role);
+      const user = await createUser(form.email, form.role, form.name || undefined, form.password);
       setUsers((prev) => [...prev, user]);
-      setForm({ email: "", role: "student" });
+      setForm({ email: "", name: "", role: "student", password: "" });
       toast.success("User created");
     } catch {
       toast.error("Failed to create user — email may already exist");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResetPassword(userId: string) {
+    if (resetPw.newPassword !== resetPw.confirm) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    setResetLoading(true);
+    try {
+      await setUserPassword(userId, resetPw.newPassword);
+      toast.success("Password updated");
+      setResetUserId(null);
+      setResetPw({ newPassword: "", confirm: "" });
+    } catch {
+      toast.error("Failed to update password");
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  async function handleEditUser(userId: string) {
+    setEditLoading(true);
+    try {
+      const updated = await updateUser(userId, {
+        name: editForm.name || undefined,
+        email: editForm.email || undefined,
+        role: editForm.role || undefined,
+      });
+      setUsers((prev) => prev.map((u) => u.id === userId ? updated : u));
+      toast.success("User updated");
+      setEditUserId(null);
+    } catch {
+      toast.error("Failed to update user — email may already be in use");
+    } finally {
+      setEditLoading(false);
     }
   }
 
@@ -77,15 +134,29 @@ export function UsersPage() {
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                 required
               />
+              <Input
+                label="Full name (optional)"
+                placeholder="e.g. John Smith"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
               <Select
                 label="Role"
                 value={form.role}
-                onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, role: e.target.value, password: "" }))}
               >
                 <option value="student">Student</option>
                 <option value="lecturer">Lecturer</option>
                 <option value="admin">Admin</option>
               </Select>
+              <Input
+                label="Password"
+                type="password"
+                placeholder="••••••••"
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                required
+              />
               <Button type="submit" loading={loading} className="w-full">Create User</Button>
             </form>
           </Card>
@@ -94,12 +165,19 @@ export function UsersPage() {
         {/* Users list */}
         <div className="lg:col-span-2">
           <Card padding={false}>
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-900">
+            <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center gap-3">
+              <h2 className="text-base font-semibold text-slate-900 shrink-0">
                 Users
                 <span className="ml-2 text-sm font-normal text-slate-400">({visible.length})</span>
               </h2>
-              <div className="flex gap-1">
+              <input
+                type="text"
+                placeholder="Search by name or email…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <div className="flex gap-1 shrink-0">
                 {TABS.map((t) => (
                   <button
                     key={t.value}
@@ -120,12 +198,92 @@ export function UsersPage() {
             ) : (
               <ul className="divide-y divide-slate-100">
                 {visible.map((u) => (
-                  <li key={u.id} className="px-5 py-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Badge color={ROLE_COLORS[u.role] ?? "slate"}>{u.role}</Badge>
-                      <span className="text-sm text-slate-800 truncate">{u.email}</span>
+                  <li key={u.id} className="px-5 py-3.5 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Badge color={ROLE_COLORS[u.role] ?? "slate"}>{u.role}</Badge>
+                        <div className="min-w-0">
+                          {u.name && <p className="text-sm font-medium text-slate-800 truncate">{u.name}</p>}
+                          <p className="text-sm text-slate-500 truncate">{u.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {(u.role !== "super_admin" || currentRole === "super_admin") && (<>
+                          <Button size="sm" variant="secondary" onClick={() => {
+                            setEditUserId(editUserId === u.id ? null : u.id);
+                            setEditForm({ name: u.name ?? "", email: u.email, role: u.role });
+                            setResetUserId(null);
+                          }}>
+                            Edit
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={() => {
+                            setResetUserId(resetUserId === u.id ? null : u.id);
+                            setResetPw({ newPassword: "", confirm: "" });
+                            setEditUserId(null);
+                          }}>
+                            Reset PW
+                          </Button>
+                          <Button size="sm" variant="danger" onClick={() => handleDelete(u)}>Delete</Button>
+                        </>)}
+                      </div>
                     </div>
-                    <Button size="sm" variant="danger" onClick={() => handleDelete(u)}>Delete</Button>
+                    {editUserId === u.id && (
+                      <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                        <Input
+                          label="Full name"
+                          placeholder="e.g. John Smith"
+                          value={editForm.name}
+                          onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                        />
+                        <Input
+                          label="Email"
+                          type="email"
+                          value={editForm.email}
+                          onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                        />
+                        {u.id !== currentUserId && (
+                          <Select
+                            label="Role"
+                            value={editForm.role}
+                            onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}
+                          >
+                            <option value="student">Student</option>
+                            <option value="lecturer">Lecturer</option>
+                            <option value="admin">Admin</option>
+                          </Select>
+                        )}
+                        <div className="flex gap-2">
+                          <Button size="sm" loading={editLoading} onClick={() => handleEditUser(u.id)}>Save</Button>
+                          <Button size="sm" variant="secondary" onClick={() => setEditUserId(null)}>Cancel</Button>
+                        </div>
+                      </div>
+                    )}
+                    {resetUserId === u.id && (
+                      <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                        <Input
+                          label="New password"
+                          type="password"
+                          placeholder="••••••••"
+                          value={resetPw.newPassword}
+                          onChange={(e) => setResetPw((p) => ({ ...p, newPassword: e.target.value }))}
+                        />
+                        <Input
+                          label="Confirm password"
+                          type="password"
+                          placeholder="••••••••"
+                          value={resetPw.confirm}
+                          onChange={(e) => setResetPw((p) => ({ ...p, confirm: e.target.value }))}
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" loading={resetLoading} onClick={() => handleResetPassword(u.id)}>
+                            Save
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={() => setResetUserId(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

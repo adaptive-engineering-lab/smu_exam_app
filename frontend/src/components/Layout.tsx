@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { getMe } from "../api/auth";
 import { getRole } from "./ProtectedRoute";
 import { Badge } from "./ui";
 
@@ -33,6 +35,11 @@ export function Layout({ children }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const role = getRole() ?? "";
+  const [userName, setUserName] = useState<string | null>(null);
+
+  useEffect(() => {
+    getMe().then((u) => setUserName(u.name ?? u.email)).catch(() => {});
+  }, []);
 
   function logout() {
     localStorage.removeItem("access_token");
@@ -77,13 +84,24 @@ export function Layout({ children }: Props) {
             })}
           </nav>
 
-          {/* Role badge + logout */}
+          {/* Role badge + settings + logout */}
           <div className="flex items-center gap-3">
             {role && (
-              <Badge color={ROLE_COLORS[role] ?? "slate"}>
-                {ROLE_LABELS[role] ?? role}
-              </Badge>
+              <div className="flex items-center gap-2">
+                {userName && (
+                  <span className="text-sm font-medium text-slate-700 hidden sm:block">{userName}</span>
+                )}
+                <Badge color={ROLE_COLORS[role] ?? "slate"}>
+                  {ROLE_LABELS[role] ?? role}
+                </Badge>
+              </div>
             )}
+            <Link
+              to="/settings"
+              className="text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors"
+            >
+              Settings
+            </Link>
             <button
               onClick={logout}
               className="text-sm font-medium text-slate-500 hover:text-red-600 transition-colors flex items-center gap-1.5"

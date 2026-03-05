@@ -18,6 +18,7 @@ export function ExamPlayerPage() {
   const [current, setCurrent] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const submitLock = useRef(false);
 
   useEffect(() => {
@@ -118,9 +119,41 @@ export function ExamPlayerPage() {
 
   const q: Question = attempt.questions[current];
   const answeredCount = Object.values(answers).filter((a) => a.selected_option_id || a.answer_text).length;
+  const unansweredCount = attempt.questions.length - answeredCount;
 
   return (
     <Layout>
+      {/* Submit confirmation modal */}
+      {showSubmitConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl">
+            <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold text-slate-900 mb-1">Submit Exam?</h2>
+            {unansweredCount > 0 ? (
+              <p className="text-slate-500 text-sm mb-5">
+                You have <span className="font-semibold text-amber-600">{unansweredCount} unanswered question{unansweredCount !== 1 ? "s" : ""}</span> out of {attempt.questions.length}. You cannot change your answers after submitting.
+              </p>
+            ) : (
+              <p className="text-slate-500 text-sm mb-5">
+                All {attempt.questions.length} questions answered. You cannot change your answers after submitting.
+              </p>
+            )}
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={() => setShowSubmitConfirm(false)} className="flex-1">
+                Keep working
+              </Button>
+              <Button variant="success" onClick={() => { setShowSubmitConfirm(false); doSubmit(); }} className="flex-1">
+                Submit
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Integrity warning modal */}
       {showWarning && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
@@ -241,14 +274,14 @@ export function ExamPlayerPage() {
                 ← Previous
               </Button>
 
-              <button onClick={doSubmit} className="text-xs text-slate-400 hover:text-red-500 transition-colors underline underline-offset-2">
+              <button onClick={() => setShowSubmitConfirm(true)} className="text-xs text-slate-400 hover:text-red-500 transition-colors underline underline-offset-2">
                 Submit early
               </button>
 
               {current < attempt.questions.length - 1 ? (
                 <Button onClick={() => setCurrent((c) => c + 1)}>Next →</Button>
               ) : (
-                <Button variant="success" onClick={doSubmit}>Submit Exam ✓</Button>
+                <Button variant="success" onClick={() => setShowSubmitConfirm(true)}>Submit Exam ✓</Button>
               )}
             </div>
           </div>

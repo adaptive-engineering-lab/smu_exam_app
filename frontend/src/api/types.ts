@@ -1,6 +1,7 @@
 export interface User {
   id: string;
   email: string;
+  name: string | null;
   role: "super_admin" | "admin" | "lecturer" | "student";
 }
 
@@ -44,6 +45,9 @@ export interface Exam {
   available_from: string | null;
   available_until: string | null;
   is_published: boolean;
+  academic_year: string | null;
+  shuffle_questions: boolean;
+  shuffle_options: boolean;
   created_at: string;
 }
 

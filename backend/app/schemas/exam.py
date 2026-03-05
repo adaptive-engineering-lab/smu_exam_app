@@ -9,6 +9,9 @@ class ExamCreate(BaseModel):
     duration_minutes: int
     available_from: datetime | None = None
     available_until: datetime | None = None
+    academic_year: str | None = None
+    shuffle_questions: bool = False
+    shuffle_options: bool = False
 
 
 class ExamUpdate(BaseModel):
@@ -17,6 +20,9 @@ class ExamUpdate(BaseModel):
     duration_minutes: int | None = None
     available_from: datetime | None = None
     available_until: datetime | None = None
+    academic_year: str | None = None
+    shuffle_questions: bool | None = None
+    shuffle_options: bool | None = None
 
 
 class ExamResponse(BaseModel):
@@ -29,6 +35,9 @@ class ExamResponse(BaseModel):
     available_from: datetime | None
     available_until: datetime | None
     is_published: bool
+    academic_year: str | None
+    shuffle_questions: bool
+    shuffle_options: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -9,8 +9,14 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
-    # OAuth
-    google_client_id: str = ""
+    # Email / password reset
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    frontend_url: str = "http://localhost:5173"
+    allowed_origins: list[str] = ["http://localhost:5173", "http://localhost:5174"]
 
     # Storage
     storage_dir: str = "./submissions"

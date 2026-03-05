@@ -1,8 +1,6 @@
 import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { GoogleLogin } from "@react-oauth/google";
+import { Link, useNavigate } from "react-router-dom";
 import { apiFetch } from "../api/client";
-import { oauthGoogle } from "../api/auth";
 import { Button, Input } from "../components/ui";
 
 export function LoginPage() {
@@ -30,21 +28,6 @@ export function LoginPage() {
     }
   }
 
-  async function handleGoogleSuccess(credentialResponse: { credential?: string }) {
-    if (!credentialResponse.credential) return;
-    setError(null);
-    setLoading(true);
-    try {
-      const data = await oauthGoogle(credentialResponse.credential);
-      localStorage.setItem("access_token", data.access_token);
-      navigate("/dashboard");
-    } catch {
-      setError("Account not registered — contact your administrator.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
@@ -62,32 +45,12 @@ export function LoginPage() {
 
         {/* Card */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 space-y-5">
-
-          {/* Google sign-in for students */}
-          <div className="flex justify-center">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => setError("Google sign-in failed.")}
-              width="320"
-              text="signin_with"
-              shape="rectangular"
-            />
-          </div>
-
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
               {error}
             </div>
           )}
 
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-slate-200" />
-            <span className="text-xs text-slate-400 font-medium">admin / staff sign in</span>
-            <div className="flex-1 h-px bg-slate-200" />
-          </div>
-
-          {/* Email/password form for admins & lecturers */}
           <form onSubmit={onSubmit} className="space-y-4">
             <Input
               label="Email address"
@@ -97,14 +60,21 @@ export function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
             />
-            <Input
-              label="Password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            <div>
+              <Input
+                label="Password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <div className="mt-1.5 text-right">
+                <Link to="/forgot-password" className="text-xs text-indigo-600 hover:text-indigo-800 transition-colors">
+                  Forgot password?
+                </Link>
+              </div>
+            </div>
             <Button type="submit" size="lg" loading={loading} className="w-full">
               Sign In
             </Button>

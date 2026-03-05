@@ -22,5 +22,29 @@ export const logIntegrity = (attemptId: string, event_type: string) =>
     body: JSON.stringify({ event_type }),
   });
 
+export type SubmissionSummary = {
+  id: string;
+  exam_id: string;
+  student_id: string;
+  student_email: string;
+  student_name: string | null;
+  started_at: string;
+  submitted_at: string | null;
+  tab_switches: number;
+  disconnect_events: number;
+};
+
 export const listSubmissions = (examId: string) =>
-  apiFetch<ExamAttempt[]>(`/exams/${examId}/submissions`);
+  apiFetch<SubmissionSummary[]>(`/exams/${examId}/submissions`);
+
+export type StudentSubmission = {
+  id: string;
+  exam_id: string;
+  exam_title: string;
+  submitted_at: string | null;
+  tab_switches: number;
+  disconnect_events: number;
+};
+
+export const mySubmissions = () =>
+  apiFetch<StudentSubmission[]>("/student/submissions");

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Layout } from "../../components/Layout";
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader } from "../../components/ui";
-import { createQuestion, deleteQuestion, getExam, listQuestions, updateQuestion } from "../../api/exams";
+import { createQuestion, deleteQuestion, getExam, importQuestionsCSV, listQuestions, updateQuestion } from "../../api/exams";
 import type { Exam, Question } from "../../api/types";
 
 type QType = "mcq" | "true_false" | "short_answer";
@@ -28,6 +28,7 @@ export function ExamBuilderPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [editDraft, setEditDraft] = useState(emptyDraft());
+  const [csvImporting, setCsvImporting] = useState(false);
 
   useEffect(() => {
     if (!examId) return;
@@ -96,6 +97,38 @@ export function ExamBuilderPage() {
     } else {
       setEditDraft((d) => ({ ...d, question_type: t, options: d.options.length >= 2 ? d.options : [{ text: "", is_correct: false }, { text: "", is_correct: false }] }));
     }
+  }
+
+  async function handleCSVImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !examId) return;
+    e.target.value = "";
+    setCsvImporting(true);
+    try {
+      const imported = await importQuestionsCSV(examId, file);
+      setQuestions((prev) => [...prev, ...imported]);
+      toast.success(`Imported ${imported.length} question${imported.length !== 1 ? "s" : ""}`);
+    } catch {
+      toast.error("CSV import failed — check file format");
+    } finally {
+      setCsvImporting(false);
+    }
+  }
+
+  function downloadTemplate() {
+    const rows = [
+      "text,question_type,points,options,correct",
+      '"What is the capital of France?",mcq,1,"Paris;London;Berlin;Rome","Paris"',
+      '"The sun is a star.",true_false,1,,True',
+      '"Explain photosynthesis in your own words.",short_answer,2,,',
+    ].join("\n");
+    const blob = new Blob([rows], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "questions_template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function handleSaveEdit(e: React.FormEvent) {
@@ -210,7 +243,18 @@ export function ExamBuilderPage() {
               </form>
             </Card>
           ) : (
-            <Button onClick={() => setShowForm(true)} className="w-full">+ Add Question</Button>
+            <div className="space-y-2">
+              <Button onClick={() => setShowForm(true)} className="w-full">+ Add Question</Button>
+              <div className="flex gap-2">
+                <label className={`flex-1 cursor-pointer text-center px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors ${csvImporting ? "opacity-50 pointer-events-none" : ""}`}>
+                  {csvImporting ? "Importing…" : "Import CSV"}
+                  <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleCSVImport} disabled={csvImporting} />
+                </label>
+                <button onClick={downloadTemplate} className="px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-500 hover:bg-slate-50 transition-colors" title="Download CSV template">
+                  Template
+                </button>
+              </div>
+            </div>
           )}
         </div>
 

@@ -16,4 +16,7 @@ class Exam(Base):
     available_from: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     available_until: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    academic_year: Mapped[str | None] = mapped_column(String, nullable=True)
+    shuffle_questions: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    shuffle_options: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())

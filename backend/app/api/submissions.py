@@ -6,17 +6,27 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_lecturer
 from app.models.attempt import ExamAttempt
-from app.schemas.attempt import AttemptResponse
+from app.models.user import User
+from app.schemas.attempt import SubmissionResponse
 
 router = APIRouter(tags=["submissions"])
 
 
-@router.get("/exams/{exam_id}/submissions", response_model=list[AttemptResponse])
+@router.get("/exams/{exam_id}/submissions", response_model=list[SubmissionResponse])
 def list_submissions(exam_id: str, db: Session = Depends(get_db), _=Depends(require_lecturer)):
-    return db.query(ExamAttempt).filter(
-        ExamAttempt.exam_id == exam_id,
-        ExamAttempt.is_submitted == True,
-    ).order_by(ExamAttempt.submitted_at.desc()).all()
+    rows = (
+        db.query(ExamAttempt, User.email, User.name)
+        .join(User, User.id == ExamAttempt.student_id)
+        .filter(ExamAttempt.exam_id == exam_id, ExamAttempt.is_submitted == True)
+        .order_by(ExamAttempt.submitted_at.desc())
+        .all()
+    )
+    result = []
+    for attempt, email, name in rows:
+        attempt.student_email = email
+        attempt.student_name = name
+        result.append(attempt)
+    return result
 
 
 @router.get("/attempts/{attempt_id}/pdf")

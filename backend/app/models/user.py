@@ -11,6 +11,7 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     role: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())

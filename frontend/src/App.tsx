@@ -2,6 +2,9 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 
 import { LoginPage } from "./pages/LoginPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -12,6 +15,7 @@ import { UsersPage } from "./pages/admin/UsersPage";
 
 import { ExamsPage } from "./pages/lecturer/ExamsPage";
 import { ExamBuilderPage } from "./pages/lecturer/ExamBuilderPage";
+import { SubmissionsPage } from "./pages/lecturer/SubmissionsPage";
 
 import { StudentDashboard } from "./pages/student/StudentDashboard";
 import { ExamPlayerPage } from "./pages/student/ExamPlayerPage";
@@ -26,7 +30,10 @@ export function App() {
       <Toaster position="top-right" />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
         {/* Admin */}
         <Route path="/admin/schools" element={<ProtectedRoute roles={ADMIN}><SchoolsPage /></ProtectedRoute>} />
@@ -37,6 +44,7 @@ export function App() {
         {/* Lecturer */}
         <Route path="/lecturer/exams" element={<ProtectedRoute roles={LECTURER}><ExamsPage /></ProtectedRoute>} />
         <Route path="/lecturer/exams/:examId/build" element={<ProtectedRoute roles={LECTURER}><ExamBuilderPage /></ProtectedRoute>} />
+        <Route path="/lecturer/exams/:examId/submissions" element={<ProtectedRoute roles={LECTURER}><SubmissionsPage /></ProtectedRoute>} />
 
         {/* Student */}
         <Route path="/student/dashboard" element={<ProtectedRoute roles={STUDENT}><StudentDashboard /></ProtectedRoute>} />
