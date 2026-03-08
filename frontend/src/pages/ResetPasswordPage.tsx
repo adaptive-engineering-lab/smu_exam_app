@@ -1,16 +1,26 @@
-import { FormEvent, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { resetPassword } from "../api/auth";
+import { FormEvent, useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 import { Button, Input } from "../components/ui";
 
 export function ResetPasswordPage() {
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get("token") ?? "";
+  const navigate = useNavigate();
+  const [ready, setReady] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Supabase sends the recovery token in the URL fragment; the client picks it up via onAuthStateChange.
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setReady(true);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -21,21 +31,23 @@ export function ResetPasswordPage() {
     setError(null);
     setLoading(true);
     try {
-      await resetPassword(token, newPassword);
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
       setDone(true);
     } catch {
-      setError("This reset link is invalid or has expired. Please request a new one.");
+      setError("Failed to update password. Please request a new reset link.");
     } finally {
       setLoading(false);
     }
   }
 
-  if (!token) {
+  if (!ready && !done) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="text-slate-600 mb-4">Invalid reset link.</p>
-          <Link to="/forgot-password" className="text-indigo-600 hover:text-indigo-800 text-sm">Request a new one</Link>
+          <p className="text-slate-600 mb-4">Waiting for reset link…</p>
+          <p className="text-xs text-slate-400 mb-4">If you arrived here via a password reset email, the link should activate shortly.</p>
+          <Link to="/forgot-password" className="text-indigo-600 hover:text-indigo-800 text-sm">Request a new link</Link>
         </div>
       </div>
     );
@@ -63,9 +75,12 @@ export function ResetPasswordPage() {
                 </svg>
               </div>
               <p className="text-sm font-medium text-slate-700">Password updated!</p>
-              <Link to="/login" className="block text-sm text-indigo-600 hover:text-indigo-800 transition-colors">
+              <button
+                onClick={() => { supabase.auth.signOut(); navigate("/login"); }}
+                className="block text-sm text-indigo-600 hover:text-indigo-800 transition-colors"
+              >
                 Sign in with new password →
-              </Link>
+              </button>
             </div>
           ) : (
             <form onSubmit={onSubmit} className="space-y-4">

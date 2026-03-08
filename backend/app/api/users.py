@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_user, require_admin
+from app.core.supabase_client import create_admin_client
+from app.models.user import User
+from app.schemas.auth import SetPasswordRequest, UpdateUserRequest
 
 PROTECTED_ROLES = {"super_admin"}
 ASSIGNABLE_ROLES = {"student", "lecturer", "admin"}
-from app.models.user import User
-from app.schemas.auth import SetPasswordRequest, UpdateUserRequest
-from app.core.security import get_password_hash
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -28,7 +28,13 @@ def list_users(role: str | None = None, db: Session = Depends(get_db), _=Depends
 
 
 @router.patch("/{user_id}", status_code=200)
-def update_user(user_id: str, body: UpdateUserRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), _=Depends(require_admin)):
+def update_user(
+    user_id: str,
+    body: UpdateUserRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _=Depends(require_admin),
+):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
@@ -43,6 +49,7 @@ def update_user(user_id: str, body: UpdateUserRequest, db: Session = Depends(get
     if body.email and body.email != user.email:
         if db.query(User).filter(User.email == body.email).first():
             raise HTTPException(409, "Email already in use")
+
     if body.name is not None:
         user.name = body.name
     if body.email is not None:
@@ -50,23 +57,53 @@ def update_user(user_id: str, body: UpdateUserRequest, db: Session = Depends(get
     if body.role is not None:
         user.role = body.role
     db.commit()
+
+    # Sync changes to Supabase Auth
+    sb_updates: dict = {}
+    if body.email is not None:
+        sb_updates["email"] = body.email
+    if body.role is not None:
+        sb_updates["app_metadata"] = {"role": body.role}
+    if body.name is not None:
+        sb_updates["user_metadata"] = {"name": body.name}
+    if sb_updates:
+        try:
+            create_admin_client().auth.admin.update_user_by_id(user_id, sb_updates)
+        except Exception:
+            pass  # DB is source of truth; Supabase sync is best-effort
+
     return {"id": user.id, "email": user.email, "name": user.name, "role": user.role}
 
 
 @router.patch("/{user_id}/password", status_code=200)
-def set_user_password(user_id: str, body: SetPasswordRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), _=Depends(require_admin)):
+def set_user_password(
+    user_id: str,
+    body: SetPasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _=Depends(require_admin),
+):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.role in PROTECTED_ROLES and current_user.role != "super_admin":
         raise HTTPException(403, "Only super_admin can reset a super_admin password")
-    user.password_hash = get_password_hash(body.new_password)
-    db.commit()
+
+    try:
+        create_admin_client().auth.admin.update_user_by_id(user_id, {"password": body.new_password})
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     return {"message": "Password updated"}
 
 
 @router.delete("/{user_id}", status_code=204)
-def delete_user(user_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), _=Depends(require_admin)):
+def delete_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _=Depends(require_admin),
+):
     if user_id == current_user.id:
         raise HTTPException(status_code=403, detail="Cannot delete your own account")
     user = db.query(User).filter(User.id == user_id).first()
@@ -74,5 +111,11 @@ def delete_user(user_id: str, db: Session = Depends(get_db), current_user: User 
         raise HTTPException(status_code=404, detail="User not found")
     if user.role in PROTECTED_ROLES and current_user.role != "super_admin":
         raise HTTPException(403, "Only super_admin can delete a super_admin account")
+
     db.delete(user)
     db.commit()
+
+    try:
+        create_admin_client().auth.admin.delete_user(user_id)
+    except Exception:
+        pass  # DB deletion succeeded; Supabase cleanup is best-effort

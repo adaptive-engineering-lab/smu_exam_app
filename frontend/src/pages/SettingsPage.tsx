@@ -2,7 +2,8 @@ import { FormEvent, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Layout } from "../components/Layout";
 import { Button, Card, CardHeader, Input, PageHeader } from "../components/ui";
-import { changePassword, getMe } from "../api/auth";
+import { getMe } from "../api/auth";
+import { supabase } from "../lib/supabase";
 import type { User } from "../api/types";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -14,7 +15,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function SettingsPage() {
   const [profile, setProfile] = useState<User | null>(null);
-  const [form, setForm] = useState({ current: "", next: "", confirm: "" });
+  const [form, setForm] = useState({ next: "", confirm: "" });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -29,11 +30,12 @@ export function SettingsPage() {
     }
     setLoading(true);
     try {
-      await changePassword(form.current, form.next);
+      const { error } = await supabase.auth.updateUser({ password: form.next });
+      if (error) throw error;
       toast.success("Password changed successfully.");
-      setForm({ current: "", next: "", confirm: "" });
+      setForm({ next: "", confirm: "" });
     } catch {
-      toast.error("Current password is incorrect.");
+      toast.error("Failed to change password. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -71,14 +73,6 @@ export function SettingsPage() {
         <Card>
           <CardHeader title="Change Password" />
           <form onSubmit={onSubmit} className="space-y-3">
-            <Input
-              label="Current password"
-              type="password"
-              placeholder="••••••••"
-              value={form.current}
-              onChange={(e) => setForm((f) => ({ ...f, current: e.target.value }))}
-              required
-            />
             <Input
               label="New password"
               type="password"

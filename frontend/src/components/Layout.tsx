@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getMe } from "../api/auth";
+import { supabase } from "../lib/supabase";
 import { getRole } from "./ProtectedRoute";
 import { Badge } from "./ui";
 
@@ -42,7 +43,7 @@ export function Layout({ children }: Props) {
   }, []);
 
   function logout() {
-    localStorage.removeItem("access_token");
+    supabase.auth.signOut();
     navigate("/login");
   }
 

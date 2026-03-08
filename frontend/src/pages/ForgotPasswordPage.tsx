@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
-import { forgotPassword } from "../api/auth";
+import { supabase } from "../lib/supabase";
 import { Button, Input } from "../components/ui";
 
 export function ForgotPasswordPage() {
@@ -12,7 +12,9 @@ export function ForgotPasswordPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await forgotPassword(email);
+      await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
     } catch {
       // Always show success — don't leak whether email exists
     } finally {
@@ -43,7 +45,7 @@ export function ForgotPasswordPage() {
                 </svg>
               </div>
               <p className="text-sm text-slate-700 font-medium">Check your email</p>
-              <p className="text-xs text-slate-500">If that address is registered, a reset link has been sent. It expires in 15 minutes.</p>
+              <p className="text-xs text-slate-500">If that address is registered, a reset link has been sent.</p>
               <Link to="/login" className="block text-sm text-indigo-600 hover:text-indigo-800 transition-colors mt-2">
                 ← Back to sign in
               </Link>

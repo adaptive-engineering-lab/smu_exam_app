@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { apiFetch } from "../api/client";
+import { supabase } from "../lib/supabase";
 import { Button, Input } from "../components/ui";
 
 export function LoginPage() {
@@ -15,11 +15,8 @@ export function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const data = await apiFetch<{ access_token: string }>("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
-      localStorage.setItem("access_token", data.access_token);
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError) throw authError;
       navigate("/dashboard");
     } catch {
       setError("Invalid email or password. Please try again.");
