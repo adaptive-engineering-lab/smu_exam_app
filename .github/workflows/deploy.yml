@@ -74,12 +74,12 @@ jobs:
           AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
         run: |
           URL="https://${AZURE_WEBAPP_NAME}.azurewebsites.net/health"
-          for i in {1..12}; do
+          for i in {1..30}; do
             if curl -fsS --connect-timeout 5 --max-time 10 "$URL" >/dev/null; then
               echo "Backend health check passed: $URL"
               exit 0
             fi
-            echo "Waiting for backend to become healthy ($i/12)..."
+            echo "Waiting for backend to become healthy ($i/30)..."
             sleep 10
           done
           echo "Backend health check failed: $URL"
