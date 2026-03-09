@@ -42,12 +42,32 @@ jobs:
           push: true
           tags: ${{ secrets.ACR_LOGIN_SERVER }}/smu-exam-backend:${{ github.sha }},${{ secrets.ACR_LOGIN_SERVER }}/smu-exam-backend:latest
 
-      - name: Deploy to Azure App Service
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          images: ${{ secrets.ACR_LOGIN_SERVER }}/smu-exam-backend:${{ github.sha }}
+      - name: Grant App Service pull access to ACR
+        env:
+          ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+          AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
+        run: |
+          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
+          az webapp identity assign -g smu-exam-rg -n "$AZURE_WEBAPP_NAME" >/dev/null
+          PRINCIPAL_ID=$(az webapp identity show -g smu-exam-rg -n "$AZURE_WEBAPP_NAME" --query principalId -o tsv)
+          ACR_ID=$(az acr show -g smu-exam-rg -n "$ACR_NAME" --query id -o tsv)
+          az role assignment create \
+            --assignee-object-id "$PRINCIPAL_ID" \
+            --assignee-principal-type ServicePrincipal \
+            --role AcrPull \
+            --scope "$ACR_ID" >/dev/null || true
+
+      - name: Deploy container to Azure App Service
+        env:
+          ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+          AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
+        run: |
+          IMAGE="${ACR_LOGIN_SERVER}/smu-exam-backend:${{ github.sha }}"
+          az webapp config container set \
+            -g smu-exam-rg \
+            -n "$AZURE_WEBAPP_NAME" \
+            --container-image-name "$IMAGE"
+          az webapp restart -g smu-exam-rg -n "$AZURE_WEBAPP_NAME"
 
   # ── Frontend: build Vite → Azure Static Web Apps ──────────────────────────
   deploy-frontend:
