@@ -75,7 +75,7 @@ jobs:
         run: |
           URL="https://${AZURE_WEBAPP_NAME}.azurewebsites.net/health"
           for i in {1..12}; do
-            if curl -fsS "$URL" >/dev/null; then
+            if curl -fsS --connect-timeout 5 --max-time 10 "$URL" >/dev/null; then
               echo "Backend health check passed: $URL"
               exit 0
             fi
@@ -139,7 +139,7 @@ jobs:
         run: |
           URL="https://salmon-rock-03519d203.6.azurestaticapps.net"
           for i in {1..12}; do
-            if curl -fsS "$URL" >/dev/null; then
+            if curl -fsS --connect-timeout 5 --max-time 10 "$URL" >/dev/null; then
               echo "Frontend availability check passed: $URL"
               exit 0
             fi
