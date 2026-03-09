@@ -1,7 +1,10 @@
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+*.db
 .env
+.env.*
 .venv
 venv/
 .venv/
@@ -9,7 +12,12 @@ venv/
 dist/
 build/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 tests/
 submissions/
 .git/
 .gitignore
+.DS_Store
