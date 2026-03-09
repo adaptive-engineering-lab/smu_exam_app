@@ -113,6 +113,8 @@ jobs:
         run: |
           npx -y @azure/static-web-apps-cli deploy ./frontend/dist \
             --deployment-token "$AZURE_STATIC_WEB_APPS_API_TOKEN" \
+            --app-name "smu-exam-frontend" \
+            --swa-config-location "./frontend" \
             --env production
 
   close-frontend-pr:
