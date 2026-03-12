@@ -38,26 +38,10 @@ export function SchoolsPage() {
     <Layout>
       <PageHeader title="Schools" subtitle="Manage all schools in the platform" />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Create form */}
-        <Card className="lg:col-span-1 self-start">
-          <CardHeader title="Add School" />
-          <form onSubmit={handleCreate} className="space-y-4">
-            <Input
-              label="School name"
-              placeholder="e.g. Faculty of Medicine"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-            <Button type="submit" loading={loading} className="w-full">
-              Create School
-            </Button>
-          </form>
-        </Card>
+      <div className="grid grid-cols-1 gap-6">
 
         {/* List */}
-        <div className="lg:col-span-2">
+        <div>
           <Card padding={false}>
             <div className="px-5 py-4 border-b border-slate-100">
               <h2 className="text-base font-semibold text-slate-900">
