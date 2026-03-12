@@ -207,7 +207,7 @@ export function UsersPage() {
                           <p className="text-sm text-slate-500 truncate">{u.email}</p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1.5 flex-wrap justify-end shrink-0">
                         {(u.role !== "super_admin" || currentRole === "super_admin") && (<>
                           <Button size="sm" variant="secondary" onClick={() => {
                             setEditUserId(editUserId === u.id ? null : u.id);

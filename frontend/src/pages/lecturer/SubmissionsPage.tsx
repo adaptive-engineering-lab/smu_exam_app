@@ -101,6 +101,7 @@ export function SubmissionsPage() {
           {visible.length === 0 ? (
             <EmptyState icon="🔍" title="No results" description="No submissions match your search." />
           ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/60">
@@ -147,6 +148,7 @@ export function SubmissionsPage() {
               ))}
             </tbody>
           </table>
+          </div>
           )}
           </>
           );

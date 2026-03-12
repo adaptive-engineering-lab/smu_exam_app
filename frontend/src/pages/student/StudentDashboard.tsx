@@ -64,9 +64,9 @@ export function StudentDashboard() {
             const isSubmitted = submittedExamIds.has(exam.id);
             return (
               <li key={exam.id}>
-                <Card className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
+                <Card className="flex flex-wrap items-start sm:items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="text-base font-semibold text-slate-900">{exam.title}</p>
                       {isSubmitted && (
                         <span className="text-xs font-medium bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -105,7 +105,7 @@ export function StudentDashboard() {
                     <Button
                       onClick={() => handleBegin(exam.id)}
                       loading={starting === exam.id}
-                      className="shrink-0 ml-4"
+                      className="w-full sm:w-auto shrink-0"
                     >
                       Begin Exam
                     </Button>
