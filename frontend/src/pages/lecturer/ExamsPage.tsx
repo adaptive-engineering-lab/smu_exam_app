@@ -234,10 +234,10 @@ export function ExamsPage() {
           <ul className="divide-y divide-slate-100">
             {visibleExams.map((exam) => (
               <li key={exam.id}>
-                <div className="px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-slate-50 transition-colors">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-sm font-semibold text-slate-900 truncate">{exam.title}</p>
+                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                      <p className="text-sm font-semibold text-slate-900">{exam.title}</p>
                       <Badge color={exam.is_published ? "emerald" : "amber"}>
                         {exam.is_published ? "Published" : "Draft"}
                       </Badge>
@@ -251,7 +251,7 @@ export function ExamsPage() {
                       {exam.available_until && <> · Closes {new Date(exam.available_until).toLocaleString()}</>}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-4">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                     {!exam.is_published && (
                       <>
                         <Button size="sm" variant="secondary" onClick={() => editingId === exam.id ? setEditingId(null) : startEdit(exam)}>
