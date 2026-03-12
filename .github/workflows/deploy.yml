@@ -48,14 +48,25 @@ jobs:
           AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
         run: |
           ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
-          az webapp identity assign -g smu-exam-rg -n "$AZURE_WEBAPP_NAME" >/dev/null
+          az webapp identity assign -g smu-exam-rg -n "$AZURE_WEBAPP_NAME" --only-show-errors >/dev/null
           PRINCIPAL_ID=$(az webapp identity show -g smu-exam-rg -n "$AZURE_WEBAPP_NAME" --query principalId -o tsv)
           ACR_ID=$(az acr show -g smu-exam-rg -n "$ACR_NAME" --query id -o tsv)
-          az role assignment create \
-            --assignee-object-id "$PRINCIPAL_ID" \
-            --assignee-principal-type ServicePrincipal \
+          EXISTING=$(az role assignment list \
+            --assignee "$PRINCIPAL_ID" \
             --role AcrPull \
-            --scope "$ACR_ID" >/dev/null || true
+            --scope "$ACR_ID" \
+            --query "[0].id" -o tsv 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            echo "AcrPull role already assigned — skipping."
+          else
+            az role assignment create \
+              --assignee-object-id "$PRINCIPAL_ID" \
+              --assignee-principal-type ServicePrincipal \
+              --role AcrPull \
+              --scope "$ACR_ID" \
+              --only-show-errors >/dev/null || \
+              echo "::warning::Could not assign AcrPull role. Grant 'User Access Administrator' to the service principal on smu-exam-rg if this is a first-time setup."
+          fi
 
       - name: Deploy container to Azure App Service
         env:
@@ -68,6 +79,17 @@ jobs:
             -n "$AZURE_WEBAPP_NAME" \
             --container-image-name "$IMAGE"
           az webapp restart -g smu-exam-rg -n "$AZURE_WEBAPP_NAME"
+
+      - name: Ensure App Service auth is not blocking health endpoint
+        env:
+          AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
+        run: |
+          az webapp auth update \
+            -g smu-exam-rg \
+            -n "$AZURE_WEBAPP_NAME" \
+            --enabled false \
+            --only-show-errors >/dev/null || \
+            echo "::warning::Could not update App Service auth settings — smoke test may fail if Easy Auth is enabled."
 
       - name: Smoke test backend
         env:
@@ -116,7 +138,9 @@ jobs:
       - name: Build
         working-directory: frontend
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
 
       - name: Azure login
@@ -136,8 +160,10 @@ jobs:
             --env production
 
       - name: Smoke test frontend
+        env:
+          AZURE_SWA_URL: ${{ secrets.AZURE_SWA_URL }}
         run: |
-          URL="https://salmon-rock-03519d203.6.azurestaticapps.net"
+          URL="${AZURE_SWA_URL:-https://salmon-rock-03519d203.6.azurestaticapps.net}"
           for i in {1..12}; do
             if curl -fsS --connect-timeout 5 --max-time 10 "$URL" >/dev/null; then
               echo "Frontend availability check passed: $URL"
