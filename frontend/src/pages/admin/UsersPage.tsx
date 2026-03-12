@@ -199,15 +199,15 @@ export function UsersPage() {
               <ul className="divide-y divide-slate-100">
                 {visible.map((u) => (
                   <li key={u.id} className="px-5 py-3.5 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                       <div className="flex items-center gap-3 min-w-0">
                         <Badge color={ROLE_COLORS[u.role] ?? "slate"}>{u.role}</Badge>
                         <div className="min-w-0">
-                          {u.name && <p className="text-sm font-medium text-slate-800 truncate">{u.name}</p>}
-                          <p className="text-sm text-slate-500 truncate">{u.email}</p>
+                          {u.name && <p className="text-sm font-medium text-slate-800">{u.name}</p>}
+                          <p className="text-sm text-slate-500 break-all">{u.email}</p>
                         </div>
                       </div>
-                      <div className="flex gap-1.5 flex-wrap justify-end shrink-0">
+                      <div className="flex gap-1.5 flex-wrap shrink-0">
                         {(u.role !== "super_admin" || currentRole === "super_admin") && (<>
                           <Button size="sm" variant="secondary" onClick={() => {
                             setEditUserId(editUserId === u.id ? null : u.id);
