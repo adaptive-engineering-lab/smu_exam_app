@@ -157,7 +157,7 @@ jobs:
         env:
           AZURE_SWA_URL: ${{ secrets.AZURE_SWA_URL }}
         run: |
-          URL="${AZURE_SWA_URL:-https://salmon-rock-03519d203.6.azurestaticapps.net}"
+          URL="${AZURE_SWA_URL:-https://purple-ground-0598d8e03.6.azurestaticapps.net}"
           for i in {1..12}; do
             if curl -fsS --connect-timeout 5 --max-time 10 "$URL" >/dev/null; then
               echo "Frontend availability check passed: $URL"
