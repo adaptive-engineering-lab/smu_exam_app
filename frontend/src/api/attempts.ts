@@ -213,6 +213,25 @@ export const mySubmissions = async (): Promise<StudentSubmission[]> => {
   });
 };
 
+export type AttemptEvent = {
+  id: string;
+  event_type: "tab_switch" | "disconnect";
+  occurred_at: string;
+};
+
+// Lazily fetched by the SubmissionsPage when a row is expanded. RLS
+// gates this read: lecturers see events on their own exams' attempts;
+// students see only their own; admin sees all.
+export const listAttemptEvents = async (attemptId: string): Promise<AttemptEvent[]> => {
+  const { data, error } = await supabase
+    .from("attempt_events")
+    .select("id, event_type, occurred_at")
+    .eq("attempt_id", attemptId)
+    .order("occurred_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as AttemptEvent[];
+};
+
 // Used by SubmissionsPage to download a PDF. Uses get-attempt-pdf edge
 // function which mints a 1-hour signed URL; legacy public URLs (stored
 // when bucket was public under FastAPI) are returned unchanged.

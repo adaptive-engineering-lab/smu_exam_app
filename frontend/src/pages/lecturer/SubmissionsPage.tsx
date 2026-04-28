@@ -3,8 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Layout } from "../../components/Layout";
 import { Button, Card, EmptyState, PageHeader } from "../../components/ui";
-import { getAttemptPdfUrl, listSubmissions } from "../../api/attempts";
-import type { SubmissionSummary } from "../../api/attempts";
+import { getAttemptPdfUrl, listAttemptEvents, listSubmissions } from "../../api/attempts";
+import type { AttemptEvent, SubmissionSummary } from "../../api/attempts";
 
 function buildFilename(s: SubmissionSummary): string {
   const name = (s.student_name || s.student_email.split("@")[0])
@@ -31,6 +31,103 @@ async function downloadPdf(s: SubmissionSummary) {
   a.download = buildFilename(s);
   a.click();
   URL.revokeObjectURL(blobUrl);
+}
+
+function SubmissionRow({
+  submission, onDownload, downloading,
+}: {
+  submission: SubmissionSummary;
+  onDownload: (s: SubmissionSummary) => void;
+  downloading: boolean;
+}) {
+  const s = submission;
+  const [expanded, setExpanded] = useState(false);
+  const [events, setEvents] = useState<AttemptEvent[] | null>(null);
+  const [eventsError, setEventsError] = useState(false);
+  const eventCount = s.tab_switches + s.disconnect_events;
+
+  async function toggle() {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && events === null) {
+      try {
+        const rows = await listAttemptEvents(s.id);
+        setEvents(rows);
+      } catch {
+        setEventsError(true);
+      }
+    }
+  }
+
+  return (
+    <>
+      <tr className="hover:bg-slate-50 transition-colors">
+        <td className="px-5 py-3.5">
+          <button
+            type="button"
+            onClick={toggle}
+            disabled={eventCount === 0}
+            className={`mr-2 inline-flex w-4 h-4 items-center justify-center text-slate-400 transition-transform ${eventCount === 0 ? "invisible" : "hover:text-slate-700"} ${expanded ? "rotate-90" : ""}`}
+            aria-label={expanded ? "Hide events" : "Show events"}
+          >▶</button>
+          {s.student_name && (
+            <span className="font-medium text-slate-900">{s.student_name}</span>
+          )}
+          <p className="text-slate-500">{s.student_email}</p>
+        </td>
+        <td className="px-5 py-3.5 text-slate-600">
+          {s.submitted_at ? new Date(s.submitted_at).toLocaleString() : "—"}
+        </td>
+        <td className="px-5 py-3.5 text-center">
+          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${s.tab_switches > 0 ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-500"}`}>
+            {s.tab_switches}
+          </span>
+        </td>
+        <td className="px-5 py-3.5 text-center">
+          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${s.disconnect_events > 0 ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
+            {s.disconnect_events}
+          </span>
+        </td>
+        <td className="px-5 py-3.5 text-right">
+          <Button size="sm" variant="secondary" loading={downloading} onClick={() => onDownload(s)}>
+            Download
+          </Button>
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="bg-slate-50/40">
+          <td colSpan={5} className="px-5 py-3 border-t border-slate-100">
+            {events === null && !eventsError && (
+              <p className="text-xs text-slate-400">Loading events…</p>
+            )}
+            {eventsError && (
+              <p className="text-xs text-red-600">Failed to load events.</p>
+            )}
+            {events && events.length === 0 && (
+              <p className="text-xs text-slate-400">No events recorded.</p>
+            )}
+            {events && events.length > 0 && (
+              <ul className="space-y-1.5">
+                {events.map((e) => (
+                  <li key={e.id} className="flex items-center gap-3 text-xs">
+                    <span className={`inline-block px-2 py-0.5 rounded-full font-semibold w-24 text-center ${e.event_type === "tab_switch" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+                      {e.event_type === "tab_switch" ? "Tab switch" : "Disconnect"}
+                    </span>
+                    <span className="text-slate-600 tabular-nums">
+                      {new Date(e.occurred_at).toLocaleTimeString()}
+                    </span>
+                    <span className="text-slate-400">
+                      {new Date(e.occurred_at).toLocaleDateString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  );
 }
 
 export function SubmissionsPage() {
@@ -112,37 +209,12 @@ export function SubmissionsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {visible.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-5 py-3.5">
-                    {s.student_name && (
-                      <p className="font-medium text-slate-900">{s.student_name}</p>
-                    )}
-                    <p className="text-slate-500">{s.student_email}</p>
-                  </td>
-                  <td className="px-5 py-3.5 text-slate-600">
-                    {s.submitted_at ? new Date(s.submitted_at).toLocaleString() : "—"}
-                  </td>
-                  <td className="px-5 py-3.5 text-center">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${s.tab_switches > 0 ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-500"}`}>
-                      {s.tab_switches}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5 text-center">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${s.disconnect_events > 0 ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
-                      {s.disconnect_events}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      loading={downloading === s.id}
-                      onClick={() => handleDownload(s)}
-                    >
-                      Download
-                    </Button>
-                  </td>
-                </tr>
+                <SubmissionRow
+                  key={s.id}
+                  submission={s}
+                  onDownload={handleDownload}
+                  downloading={downloading === s.id}
+                />
               ))}
             </tbody>
           </table>
