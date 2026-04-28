@@ -9,6 +9,7 @@ import { useExamTimer } from "../../hooks/useExamTimer";
 import type { AnswerPayload, AttemptWithQuestions, Question } from "../../api/types";
 
 const LS_KEY = (id: string) => `exam_answers_${id}`;
+const PENDING_KEY = (id: string) => `pending_submit_${id}`;
 
 export function ExamPlayerPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
@@ -19,6 +20,7 @@ export function ExamPlayerPage() {
   const [submitted, setSubmitted] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [submitPending, setSubmitPending] = useState(false);
   const submitLock = useRef(false);
 
   useEffect(() => {
@@ -58,18 +60,26 @@ export function ExamPlayerPage() {
   const { markDirty, flushNow } = useAutosave(attemptId ?? "", getAnswersList);
 
   async function doSubmit() {
-    if (!attemptId || submitLock.current) return;
+    if (!attemptId || submitLock.current || submitted) return;
     submitLock.current = true;
+    setSubmitPending(true);
+    localStorage.setItem(PENDING_KEY(attemptId), "1");
     try {
       await flushNow();
       await submitAttempt(attemptId);
       localStorage.removeItem(LS_KEY(attemptId));
       localStorage.removeItem(`timer_${attemptId}`);
+      localStorage.removeItem(PENDING_KEY(attemptId));
+      setSubmitPending(false);
       setSubmitted(true);
       toast.success("Exam submitted!");
     } catch {
-      toast.error("Failed to submit. Please try again.");
+      // Keep submitPending true and the LS flag set; release the lock
+      // so the online-event listener (or a manual retry) can re-enter.
+      // The submit-attempt edge function is idempotent, so retrying is
+      // safe even if the original request reached the server.
       submitLock.current = false;
+      toast.error("Submission queued — will retry when reconnected.");
     }
   }
 
@@ -79,6 +89,31 @@ export function ExamPlayerPage() {
     attempt?.duration_minutes ?? 60,
     doSubmit,
   );
+
+  // Late-submit guard rail. If a previous submit attempt left a "pending"
+  // marker in localStorage (timer expired offline, or a refresh happened
+  // mid-retry), restore the pending banner and retry now if we're online.
+  // Re-arm a one-shot online listener so the retry happens automatically
+  // the moment the network returns. The doSubmit guards (submitLock,
+  // submitted) and the edge function's idempotency (already_submitted)
+  // make repeated firings safe.
+  const doSubmitRef = useRef(doSubmit);
+  useEffect(() => { doSubmitRef.current = doSubmit; });
+
+  useEffect(() => {
+    if (!attemptId) return;
+    if (localStorage.getItem(PENDING_KEY(attemptId))) {
+      setSubmitPending(true);
+      if (navigator.onLine) doSubmitRef.current();
+    }
+  }, [attemptId]);
+
+  useEffect(() => {
+    if (!submitPending || submitted) return;
+    function onOnline() { doSubmitRef.current(); }
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [submitPending, submitted]);
 
   function setAnswer(questionId: string, payload: Partial<AnswerPayload>) {
     setAnswers((prev) => ({ ...prev, [questionId]: { ...prev[questionId], ...payload, question_id: questionId } }));
@@ -166,6 +201,22 @@ export function ExamPlayerPage() {
             <h2 className="text-lg font-bold text-slate-900 mb-1">Tab Switch Detected</h2>
             <p className="text-slate-500 text-sm mb-5">Leaving the exam window has been logged. This incident will be included in your submission report.</p>
             <Button variant="danger" onClick={() => setShowWarning(false)} className="w-full">I understand</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Pending-submit banner (offline at submit time) */}
+      {submitPending && !submitted && (
+        <div className="mb-4 p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3">
+          <div className="shrink-0 w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+            <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
+          </div>
+          <div className="text-sm">
+            <p className="font-semibold text-amber-900">Submission pending</p>
+            <p className="text-amber-800 mt-0.5">
+              Your answers are saved on this device. We'll submit automatically
+              when your connection returns. Don't close this tab.
+            </p>
           </div>
         </div>
       )}
