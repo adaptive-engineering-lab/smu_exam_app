@@ -13,6 +13,62 @@ export const listStudents = async (): Promise<StudentSummary[]> => {
   return (data ?? []) as StudentSummary[];
 };
 
+// Flat list of every course the caller can read, joined to its degree +
+// school for display context. Powers the course-code jump shortcut on
+// /lecturer/exams (type "CA-101", get the school + degree + course in
+// one shot). PostgREST caps responses at 1000 rows by default — bumped
+// here so big institutions don't get silently truncated.
+export type CourseWithContext = {
+  id: string;
+  code: string;
+  name: string;
+  degree_id: string;
+  degree_name: string;
+  school_id: string;
+  school_name: string;
+};
+
+export const listAllCoursesWithContext = async (): Promise<CourseWithContext[]> => {
+  const { data, error } = await supabase
+    .from("courses")
+    .select(`
+      id, code, name, degree_id,
+      degrees:degree_id (
+        name,
+        school_id,
+        schools:school_id (name)
+      )
+    `)
+    .order("code")
+    .limit(10000);
+  if (error) throw new Error(error.message);
+
+  type JoinedSchool = { name: string };
+  type JoinedDegree = {
+    name: string;
+    school_id: string;
+    schools: JoinedSchool | JoinedSchool[] | null;
+  };
+  type Row = {
+    id: string; code: string; name: string; degree_id: string;
+    degrees: JoinedDegree | JoinedDegree[] | null;
+  };
+  return ((data ?? []) as unknown as Row[]).flatMap((r) => {
+    const deg = Array.isArray(r.degrees) ? r.degrees[0] ?? null : r.degrees;
+    if (!deg) return [];
+    const sch = Array.isArray(deg.schools) ? deg.schools[0] ?? null : deg.schools;
+    return [{
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      degree_id: r.degree_id,
+      degree_name: deg.name,
+      school_id: deg.school_id,
+      school_name: sch?.name ?? "",
+    }];
+  });
+};
+
 export const listCourses = async (degreeId: string): Promise<Course[]> => {
   const { data, error } = await supabase
     .from("courses")

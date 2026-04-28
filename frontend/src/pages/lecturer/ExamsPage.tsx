@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Layout } from "../../components/Layout";
-import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, Select } from "../../components/ui";
+import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, SearchSelect, Select } from "../../components/ui";
 import { listSchools } from "../../api/schools";
 import { listDegrees } from "../../api/degrees";
-import { listCourses } from "../../api/courses";
+import { listAllCoursesWithContext, listCourses } from "../../api/courses";
+import type { CourseWithContext } from "../../api/courses";
 import { createExam, deleteExam, listExams, togglePublish, updateExam } from "../../api/exams";
+import { useStickyParam } from "../../hooks/useStickyParam";
 import type { Course, Degree, Exam, School } from "../../api/types";
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -21,9 +23,28 @@ export function ExamsPage() {
   const [degrees, setDegrees] = useState<Degree[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
-  const [selectedSchool, setSelectedSchool] = useState("");
-  const [selectedDegree, setSelectedDegree] = useState("");
-  const [selectedCourse, setSelectedCourse] = useState("");
+  const [selectedSchool, setSelectedSchool] = useStickyParam("school", { storageKey: "picker.exams.school" });
+  const [selectedDegree, setSelectedDegree] = useStickyParam("degree", { storageKey: "picker.exams.degree" });
+  const [selectedCourse, setSelectedCourse] = useStickyParam("course", { storageKey: "picker.exams.course" });
+  const [allCourses, setAllCourses] = useState<CourseWithContext[]>([]);
+
+  function pickSchool(id: string) {
+    setSelectedSchool(id);
+    if (id !== selectedSchool) { setSelectedDegree(""); setSelectedCourse(""); }
+  }
+  function pickDegree(id: string) {
+    setSelectedDegree(id);
+    if (id !== selectedDegree) setSelectedCourse("");
+  }
+
+  // Course-code jump: pick all three cascade slots in one shot from a
+  // CourseWithContext entry. The cascading effects below will fire and
+  // load the matching degrees/courses lists.
+  function jumpToCourse(c: CourseWithContext) {
+    setSelectedSchool(c.school_id);
+    setSelectedDegree(c.degree_id);
+    setSelectedCourse(c.id);
+  }
   const [form, setForm] = useState({ title: "", description: "", duration_minutes: 60, academic_year: "", available_from: "", available_until: "", shuffle_questions: false, shuffle_options: false });
   const [yearFilter, setYearFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft">("all");
@@ -33,6 +54,7 @@ export function ExamsPage() {
   const [editForm, setEditForm] = useState({ title: "", description: "", duration_minutes: 60, academic_year: "", available_from: "", available_until: "", shuffle_questions: false, shuffle_options: false });
 
   useEffect(() => { listSchools().then(setSchools); }, []);
+  useEffect(() => { listAllCoursesWithContext().then(setAllCourses).catch(() => {}); }, []);
   useEffect(() => {
     if (!selectedSchool) { setDegrees([]); return; }
     listDegrees(selectedSchool).then(setDegrees);
@@ -45,6 +67,34 @@ export function ExamsPage() {
     if (!selectedCourse) { setExams([]); setShowForm(false); setYearFilter("all"); setStatusFilter("all"); return; }
     listExams(selectedCourse).then(setExams);
   }, [selectedCourse]);
+
+  // Clear stale stored ids if the underlying lists no longer contain them.
+  // The order matters: a stale school invalidates the dependent degree/course.
+  useEffect(() => {
+    if (schools.length === 0) return;
+    if (selectedSchool && !schools.some((s) => s.id === selectedSchool)) {
+      setSelectedSchool(""); setSelectedDegree(""); setSelectedCourse("");
+    }
+  }, [schools, selectedSchool, setSelectedSchool, setSelectedDegree, setSelectedCourse]);
+  useEffect(() => {
+    if (!selectedSchool || degrees.length === 0) return;
+    if (selectedDegree && !degrees.some((d) => d.id === selectedDegree)) {
+      setSelectedDegree(""); setSelectedCourse("");
+    }
+  }, [degrees, selectedSchool, selectedDegree, setSelectedDegree, setSelectedCourse]);
+  useEffect(() => {
+    if (!selectedDegree || courses.length === 0) return;
+    if (selectedCourse && !courses.some((c) => c.id === selectedCourse)) setSelectedCourse("");
+  }, [courses, selectedDegree, selectedCourse, setSelectedCourse]);
+
+  const courseJumpItems = useMemo(
+    () => allCourses.map((c) => ({
+      value: c.id,
+      label: `${c.code} — ${c.name}`,
+      meta: c.school_name,
+    })),
+    [allCourses],
+  );
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -143,19 +193,45 @@ export function ExamsPage() {
 
       {/* Filters */}
       <Card className="mb-6">
+        {courseJumpItems.length > 0 && (
+          <div className="mb-4 pb-4 border-b border-slate-100">
+            <SearchSelect
+              label="Jump to course"
+              placeholder="Type a course code (e.g. CA-101) or name…"
+              items={courseJumpItems}
+              value={selectedCourse}
+              onChange={(id) => {
+                if (!id) { setSelectedCourse(""); return; }
+                const c = allCourses.find((x) => x.id === id);
+                if (c) jumpToCourse(c);
+              }}
+            />
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Select label="School" placeholder="— school —" value={selectedSchool}
-            onChange={(e) => { setSelectedSchool(e.target.value); setSelectedDegree(""); setSelectedCourse(""); }}>
-            {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </Select>
-          <Select label="Degree" placeholder="— degree —" value={selectedDegree}
-            onChange={(e) => { setSelectedDegree(e.target.value); setSelectedCourse(""); }} disabled={!selectedSchool}>
-            {degrees.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </Select>
-          <Select label="Course" placeholder="— course —" value={selectedCourse}
-            onChange={(e) => setSelectedCourse(e.target.value)} disabled={!selectedDegree}>
-            {courses.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
-          </Select>
+          <SearchSelect
+            label="School"
+            placeholder="— school —"
+            value={selectedSchool}
+            onChange={pickSchool}
+            items={schools.map((s) => ({ value: s.id, label: s.name }))}
+          />
+          <SearchSelect
+            label="Degree"
+            placeholder="— degree —"
+            value={selectedDegree}
+            onChange={pickDegree}
+            disabled={!selectedSchool}
+            items={degrees.map((d) => ({ value: d.id, label: d.name }))}
+          />
+          <SearchSelect
+            label="Course"
+            placeholder="— course —"
+            value={selectedCourse}
+            onChange={setSelectedCourse}
+            disabled={!selectedDegree}
+            items={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }))}
+          />
         </div>
       </Card>
 

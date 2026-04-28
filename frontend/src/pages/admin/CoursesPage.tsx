@@ -1,20 +1,26 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Layout } from "../../components/Layout";
-import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, Select } from "../../components/ui";
+import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, SearchSelect, Select } from "../../components/ui";
 import { listSchools } from "../../api/schools";
 import { listDegrees } from "../../api/degrees";
 import { assignInstructor, createCourse, enrollBulk, enrollStudent, listCourses, listEnrollments, listStudents } from "../../api/courses";
 import type { BulkEnrolResult, StudentSummary } from "../../api/courses";
 import { listUsers } from "../../api/users";
+import { useStickyParam } from "../../hooks/useStickyParam";
 import type { Course, Degree, School, User } from "../../api/types";
 
 export function CoursesPage() {
   const [schools, setSchools] = useState<School[]>([]);
   const [degrees, setDegrees] = useState<Degree[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [selectedSchool, setSelectedSchool] = useState("");
-  const [selectedDegree, setSelectedDegree] = useState("");
+  const [selectedSchool, setSelectedSchool] = useStickyParam("school", { storageKey: "picker.courses.school" });
+  const [selectedDegree, setSelectedDegree] = useStickyParam("degree", { storageKey: "picker.courses.degree" });
+
+  function pickSchool(id: string) {
+    setSelectedSchool(id);
+    if (id !== selectedSchool) setSelectedDegree("");
+  }
   const [form, setForm] = useState({ name: "", code: "", lecturer_id: "" });
   const [enrollCourseId, setEnrollCourseId] = useState("");
   const [studentId, setStudentId] = useState("");
@@ -35,13 +41,26 @@ export function CoursesPage() {
   useEffect(() => { listUsers("lecturer").then(setLecturers).catch(() => {}); }, []);
   useEffect(() => { listStudents().then(setStudents).catch(() => {}); }, []);
   useEffect(() => {
-    if (!selectedSchool) { setDegrees([]); setSelectedDegree(""); return; }
+    if (!selectedSchool) { setDegrees([]); return; }
     listDegrees(selectedSchool).then(setDegrees);
   }, [selectedSchool]);
   useEffect(() => {
     if (!selectedDegree) { setCourses([]); return; }
     listCourses(selectedDegree).then(setCourses);
   }, [selectedDegree]);
+
+  // Clear stale stored ids if the underlying lists no longer contain them.
+  useEffect(() => {
+    if (schools.length === 0) return;
+    if (selectedSchool && !schools.some((s) => s.id === selectedSchool)) {
+      setSelectedSchool("");
+      setSelectedDegree("");
+    }
+  }, [schools, selectedSchool, setSelectedSchool, setSelectedDegree]);
+  useEffect(() => {
+    if (!selectedSchool || degrees.length === 0) return;
+    if (selectedDegree && !degrees.some((d) => d.id === selectedDegree)) setSelectedDegree("");
+  }, [degrees, selectedSchool, selectedDegree, setSelectedDegree]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -129,23 +148,21 @@ export function CoursesPage() {
           <Card>
             <CardHeader title="Filter" />
             <div className="space-y-3">
-              <Select
+              <SearchSelect
                 label="School"
                 placeholder="— school —"
                 value={selectedSchool}
-                onChange={(e) => { setSelectedSchool(e.target.value); setSelectedDegree(""); }}
-              >
-                {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
-              <Select
+                onChange={pickSchool}
+                items={schools.map((s) => ({ value: s.id, label: s.name }))}
+              />
+              <SearchSelect
                 label="Degree"
                 placeholder="— degree —"
                 value={selectedDegree}
-                onChange={(e) => setSelectedDegree(e.target.value)}
+                onChange={setSelectedDegree}
                 disabled={!selectedSchool}
-              >
-                {degrees.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </Select>
+                items={degrees.map((d) => ({ value: d.id, label: d.name }))}
+              />
             </div>
           </Card>
 

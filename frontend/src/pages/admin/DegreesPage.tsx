@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Layout } from "../../components/Layout";
-import { Button, Card, CardHeader, EmptyState, Input, PageHeader, Select } from "../../components/ui";
+import { Button, Card, CardHeader, EmptyState, Input, PageHeader, SearchSelect } from "../../components/ui";
 import { listSchools } from "../../api/schools";
 import { createDegree, listDegrees } from "../../api/degrees";
+import { useStickyParam } from "../../hooks/useStickyParam";
 import type { Degree, School } from "../../api/types";
 
 export function DegreesPage() {
   const [schools, setSchools] = useState<School[]>([]);
-  const [selectedSchool, setSelectedSchool] = useState("");
+  const [selectedSchool, setSelectedSchool] = useStickyParam("school", { storageKey: "picker.degrees.school" });
   const [degrees, setDegrees] = useState<Degree[]>([]);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -16,6 +17,12 @@ export function DegreesPage() {
   useEffect(() => {
     listSchools().then(setSchools).catch(() => toast.error("Failed to load schools"));
   }, []);
+
+  // Clear stale stored ids if the underlying list changed.
+  useEffect(() => {
+    if (schools.length === 0) return;
+    if (selectedSchool && !schools.some((s) => s.id === selectedSchool)) setSelectedSchool("");
+  }, [schools, selectedSchool, setSelectedSchool]);
 
   useEffect(() => {
     if (!selectedSchool) { setDegrees([]); return; }
@@ -48,14 +55,13 @@ export function DegreesPage() {
         <div className="space-y-4 lg:col-span-1">
           <Card>
             <CardHeader title="Filter by School" />
-            <Select
+            <SearchSelect
               label="School"
               placeholder="— select a school —"
               value={selectedSchool}
-              onChange={(e) => setSelectedSchool(e.target.value)}
-            >
-              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </Select>
+              onChange={setSelectedSchool}
+              items={schools.map((s) => ({ value: s.id, label: s.name }))}
+            />
           </Card>
 
           {selectedSchool && (
