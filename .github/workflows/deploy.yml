@@ -1,171 +1,42 @@
-name: Deploy to Azure
+name: Deploy Supabase
+
+# Deploys SQL migrations and Edge Functions to the linked Supabase project.
+# Frontend deploys are handled by Netlify's GitHub integration (no GHA job).
 
 on:
   push:
     branches: [main]
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/functions/**'
+      - 'supabase/config.toml'
   workflow_dispatch:
 
 jobs:
-  # ── Backend: build Docker image → Azure Container Registry → App Service ──
-  deploy-backend:
-    name: Backend → Azure App Service
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+  deploy:
+    name: Migrations + Edge Functions
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Azure login
-        uses: azure/login@v2
+      - uses: supabase/setup-cli@v1
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          version: latest
 
-      - name: Log in to Azure Container Registry
-        env:
-          ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Push database migrations
+        run: supabase db push
+
+      - name: Deploy Edge Functions
         run: |
-          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
-          az acr login --name "$ACR_NAME"
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: ${{ secrets.ACR_LOGIN_SERVER }}/smu-exam-backend:${{ github.sha }},${{ secrets.ACR_LOGIN_SERVER }}/smu-exam-backend:latest
-
-      - name: Grant App Service pull access to ACR
-        env:
-          ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
-          AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
-        run: |
-          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
-          az webapp identity assign -g smu-exam-rg -n "$AZURE_WEBAPP_NAME" --only-show-errors >/dev/null
-          PRINCIPAL_ID=$(az webapp identity show -g smu-exam-rg -n "$AZURE_WEBAPP_NAME" --query principalId -o tsv)
-          ACR_ID=$(az acr show -g smu-exam-rg -n "$ACR_NAME" --query id -o tsv)
-          EXISTING=$(az role assignment list \
-            --assignee "$PRINCIPAL_ID" \
-            --role AcrPull \
-            --scope "$ACR_ID" \
-            --query "[0].id" -o tsv 2>/dev/null || true)
-          if [ -n "$EXISTING" ]; then
-            echo "AcrPull role already assigned — skipping."
-          else
-            az role assignment create \
-              --assignee-object-id "$PRINCIPAL_ID" \
-              --assignee-principal-type ServicePrincipal \
-              --role AcrPull \
-              --scope "$ACR_ID" \
-              --only-show-errors >/dev/null || \
-              echo "::warning::Could not assign AcrPull role. Grant 'User Access Administrator' to the service principal on smu-exam-rg if this is a first-time setup."
-          fi
-
-      - name: Deploy container to Azure App Service
-        env:
-          ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
-          AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
-        run: |
-          IMAGE="${ACR_LOGIN_SERVER}/smu-exam-backend:${{ github.sha }}"
-          az webapp config container set \
-            -g smu-exam-rg \
-            -n "$AZURE_WEBAPP_NAME" \
-            --container-image-name "$IMAGE"
-          az webapp restart -g smu-exam-rg -n "$AZURE_WEBAPP_NAME"
-
-      - name: Ensure App Service auth is not blocking health endpoint
-        env:
-          AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
-        run: |
-          az webapp auth update \
-            -g smu-exam-rg \
-            -n "$AZURE_WEBAPP_NAME" \
-            --enabled false \
-            --only-show-errors >/dev/null || \
-            echo "::warning::Could not update App Service auth settings — smoke test may fail if Easy Auth is enabled."
-
-      - name: Smoke test backend
-        env:
-          AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
-        run: |
-          URL="https://${AZURE_WEBAPP_NAME}.azurewebsites.net/health"
-          for i in {1..30}; do
-            if curl -fsS --connect-timeout 5 --max-time 10 "$URL" >/dev/null; then
-              echo "Backend health check passed: $URL"
-              exit 0
-            fi
-            echo "Waiting for backend to become healthy ($i/30)..."
-            sleep 10
-          done
-          echo "Backend health check failed: $URL"
-          exit 1
-
-  # ── Frontend: build Vite → Azure Static Web Apps ──────────────────────────
-  deploy-frontend:
-    name: Frontend → Azure Static Web Apps
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       github.event.action != 'closed' &&
-       github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build
-        working-directory: frontend
-        env:
-          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-        run: npm run build
-
-      - name: Deploy to Azure Static Web Apps
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          action: upload
-          app_location: frontend/dist
-          output_location: ""
-          config_file_location: frontend
-          skip_app_build: true
-
-      - name: Smoke test frontend
-        env:
-          AZURE_SWA_URL: ${{ secrets.AZURE_SWA_URL }}
-        run: |
-          URL="${AZURE_SWA_URL:-https://purple-ground-0598d8e03.6.azurestaticapps.net}"
-          for i in {1..12}; do
-            if curl -fsS --connect-timeout 5 --max-time 10 "$URL" >/dev/null; then
-              echo "Frontend availability check passed: $URL"
-              exit 0
-            fi
-            echo "Waiting for frontend deployment to propagate ($i/12)..."
-            sleep 10
-          done
-          echo "Frontend availability check failed: $URL"
-          exit 1
+          supabase functions deploy submit-attempt
+          supabase functions deploy import-questions-csv
+          supabase functions deploy admin-user-management
+          supabase functions deploy get-attempt-pdf
