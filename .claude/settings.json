@@ -5,7 +5,8 @@
       "mcp__supabase__get_project_url",
       "mcp__supabase__get_publishable_keys",
       "Bash(az account:*)",
-      "Bash(az webapp:*)"
+      "Bash(az webapp:*)",
+      "Bash(git checkout *)"
     ]
   }
 }

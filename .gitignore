@@ -31,5 +31,8 @@ frontend/dist/
 # Backend generated artifacts
 backend/submissions/
 
+# Playwright MCP screenshots
+.playwright-mcp/
+
 # OS
 .DS_Store
