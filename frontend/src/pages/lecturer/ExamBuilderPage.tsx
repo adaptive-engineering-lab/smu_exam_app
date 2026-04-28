@@ -3,7 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Layout } from "../../components/Layout";
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader } from "../../components/ui";
-import { createQuestion, deleteQuestion, getExam, importQuestionsCSV, listQuestions, updateQuestion } from "../../api/exams";
+import { cloneQuestionsToExam, createQuestion, deleteQuestion, getExam, importQuestionsCSV, listBankQuestions, listQuestions, updateQuestion } from "../../api/exams";
+import type { BankQuestion } from "../../api/exams";
 import type { Exam, Question } from "../../api/types";
 
 type QType = "mcq" | "true_false" | "short_answer";
@@ -29,6 +30,12 @@ export function ExamBuilderPage() {
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [editDraft, setEditDraft] = useState(emptyDraft());
   const [csvImporting, setCsvImporting] = useState(false);
+  const [showBank, setShowBank] = useState(false);
+  const [bankItems, setBankItems] = useState<BankQuestion[] | null>(null);
+  const [bankSearch, setBankSearch] = useState("");
+  const [bankSelected, setBankSelected] = useState<Set<string>>(new Set());
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankAdding, setBankAdding] = useState(false);
 
   useEffect(() => {
     if (!examId) return;
@@ -99,6 +106,49 @@ export function ExamBuilderPage() {
     }
   }
 
+  async function openBank() {
+    setShowBank(true);
+    setBankSelected(new Set());
+    setBankSearch("");
+    if (bankItems !== null) return; // already loaded this session
+    setBankLoading(true);
+    try {
+      const rows = await listBankQuestions(examId ?? undefined);
+      setBankItems(rows);
+    } catch {
+      toast.error("Failed to load question bank");
+      setBankItems([]);
+    } finally {
+      setBankLoading(false);
+    }
+  }
+
+  function toggleBankPick(id: string) {
+    setBankSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function addFromBank() {
+    if (!examId || bankSelected.size === 0) return;
+    const ids = Array.from(bankSelected);
+    setBankAdding(true);
+    try {
+      await cloneQuestionsToExam(examId, ids);
+      // Refetch the exam's questions so we get fresh options + correct order.
+      const fresh = await listQuestions(examId);
+      setQuestions(fresh);
+      setShowBank(false);
+      toast.success(`Added ${ids.length} question${ids.length !== 1 ? "s" : ""} from bank`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to clone");
+    } finally {
+      setBankAdding(false);
+    }
+  }
+
   async function handleCSVImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !examId) return;
@@ -152,8 +202,100 @@ export function ExamBuilderPage() {
     }
   }
 
+  const filteredBank = (() => {
+    const items = bankItems ?? [];
+    const q = bankSearch.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((it) =>
+      it.text.toLowerCase().includes(q)
+      || it.exam_title.toLowerCase().includes(q)
+      || (it.course_code ?? "").toLowerCase().includes(q),
+    );
+  })();
+
   return (
     <Layout>
+      {/* Bank picker modal */}
+      {showBank && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Add from Question Bank</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Pick from your existing questions across all exams. Each pick is copied into this exam.
+                </p>
+              </div>
+              <button onClick={() => setShowBank(false)} className="text-slate-400 hover:text-slate-600 text-lg" aria-label="Close">✕</button>
+            </div>
+            <div className="px-5 py-3 border-b border-slate-100">
+              <input
+                type="text"
+                placeholder="Search by question text, exam title, or course code…"
+                value={bankSearch}
+                onChange={(e) => setBankSearch(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                autoFocus
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 py-2">
+              {bankLoading && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+              {!bankLoading && filteredBank.length === 0 && (
+                <div className="py-12 text-center text-sm text-slate-500">
+                  {bankItems && bankItems.length === 0
+                    ? "No reusable questions in your bank yet. Create some questions in another exam first."
+                    : "No questions match your search."}
+                </div>
+              )}
+              {!bankLoading && filteredBank.length > 0 && (
+                <ul className="space-y-1">
+                  {filteredBank.map((q) => {
+                    const checked = bankSelected.has(q.id);
+                    return (
+                      <li key={q.id}>
+                        <label className={`flex items-start gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${checked ? "bg-indigo-50 ring-1 ring-indigo-200" : "hover:bg-slate-50"}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleBankPick(q.id)}
+                            className="mt-1 accent-indigo-600 shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-slate-800 leading-snug">{q.text}</p>
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              <Badge color="slate">{TYPE_LABELS[q.question_type]}</Badge>
+                              <Badge color="indigo">{q.points}pt</Badge>
+                              <span className="text-xs text-slate-400">
+                                {q.course_code ? `${q.course_code} · ` : ""}{q.exam_title}
+                              </span>
+                            </div>
+                          </div>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                {bankSelected.size === 0 ? "No questions selected" : `${bankSelected.size} selected`}
+              </span>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setShowBank(false)}>Cancel</Button>
+                <Button onClick={addFromBank} loading={bankAdding} disabled={bankSelected.size === 0}>
+                  Add {bankSelected.size > 0 ? `${bankSelected.size} ` : ""}to exam
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <PageHeader
         title={exam?.title ?? "Exam Builder"}
         subtitle={exam ? `${exam.duration_minutes} min · ${questions.length} question${questions.length !== 1 ? "s" : ""}` : undefined}
@@ -245,6 +387,7 @@ export function ExamBuilderPage() {
           ) : (
             <div className="space-y-2">
               <Button onClick={() => setShowForm(true)} className="w-full">+ Add Question</Button>
+              <Button variant="secondary" onClick={openBank} className="w-full">+ From Bank</Button>
               <div className="flex gap-2">
                 <label className={`flex-1 cursor-pointer text-center px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors ${csvImporting ? "opacity-50 pointer-events-none" : ""}`}>
                   {csvImporting ? "Importing…" : "Import CSV"}

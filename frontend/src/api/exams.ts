@@ -163,6 +163,75 @@ export const deleteExam = async (examId: string): Promise<void> => {
   if (error) throw new Error(error.message);
 };
 
+// ─── Question bank ───────────────────────────────────────────────────────
+// The "bank" is every question the lecturer has authored across all their
+// exams (RLS already scopes the questions table to admin / owning lecturer
+// / student-with-attempt). Optionally exclude the current exam so the
+// picker doesn't show questions already in this exam.
+
+export type BankQuestion = {
+  id: string;
+  text: string;
+  question_type: "mcq" | "true_false" | "short_answer";
+  points: number;
+  exam_id: string;
+  exam_title: string;
+  course_code: string | null;
+};
+
+export const listBankQuestions = async (
+  excludeExamId?: string,
+): Promise<BankQuestion[]> => {
+  let q = supabase
+    .from("questions")
+    .select(`
+      id, text, question_type, points, exam_id,
+      exams:exam_id (
+        title,
+        courses:course_id (code)
+      )
+    `)
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (excludeExamId) q = q.neq("exam_id", excludeExamId);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+
+  type JoinedCourse = { code: string };
+  type JoinedExam = { title: string; courses: JoinedCourse | JoinedCourse[] | null };
+  type Row = {
+    id: string; text: string; points: number; exam_id: string;
+    question_type: BankQuestion["question_type"];
+    exams: JoinedExam | JoinedExam[] | null;
+  };
+  return ((data ?? []) as unknown as Row[]).map((r) => {
+    const exam = Array.isArray(r.exams) ? r.exams[0] ?? null : r.exams;
+    const course = exam ? (Array.isArray(exam.courses) ? exam.courses[0] ?? null : exam.courses) : null;
+    return {
+      id: r.id,
+      text: r.text,
+      question_type: r.question_type,
+      points: r.points,
+      exam_id: r.exam_id,
+      exam_title: exam?.title ?? "—",
+      course_code: course?.code ?? null,
+    };
+  });
+};
+
+// Returns the new question ids (in the same order as the input).
+export const cloneQuestionsToExam = async (
+  examId: string,
+  sourceQuestionIds: string[],
+): Promise<string[]> => {
+  const { data, error } = await supabase.rpc("clone_questions_to_exam", {
+    p_target_exam_id: examId,
+    p_source_question_ids: sourceQuestionIds,
+  });
+  if (error) throw new Error(error.message);
+  return (data as string[]) ?? [];
+};
+
 export const importQuestionsCSV = async (
   examId: string,
   file: File,
