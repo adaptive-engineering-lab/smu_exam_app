@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 // useStickyParam — drop-in replacement for useState<string>("") that
-// round-trips through both the URL (?<name>=...) and localStorage. URL wins
-// on initial read so a shared link works; localStorage is the fallback for
-// returning users with no params. Setting "" clears both, keeping URLs
-// tidy when a slot is unselected.
+// round-trips through both the URL (?<name>=...) and localStorage.
+//
+// Initial value: URL wins, then localStorage. On set: writes both. On
+// browser back/forward: down-syncs from the URL — but only when the URL
+// provides a non-null value, so plain navigation back to a page (URL
+// has no params, but localStorage does) preserves the restored state.
 //
 // The hook is intentionally generic and unaware of cascading semantics:
 // pages own their own reset logic at the call site (e.g. when school
@@ -26,30 +28,36 @@ export function useStickyParam(
 ): [string, (v: string) => void] {
   const storageKey = opts.storageKey ?? name;
   const [params, setParams] = useSearchParams();
-  const fromUrl = params.get(name) ?? "";
-  const initial = fromUrl !== ""
-    ? fromUrl
-    : (typeof window !== "undefined" ? localStorage.getItem(storageKey) ?? "" : "");
 
-  const [value, setValueState] = useState<string>(initial);
+  // Initial value: prefer URL, then localStorage, then "".
+  const [value, setValueState] = useState<string>(() => {
+    const fromUrl = params.get(name);
+    if (fromUrl !== null && fromUrl !== "") return fromUrl;
+    if (typeof window !== "undefined") return localStorage.getItem(storageKey) ?? "";
+    return "";
+  });
 
-  // Track URL changes (back/forward, programmatic navigation) so the
-  // visible state mirrors history. Only sync down from the URL — never
-  // up from state — to avoid a feedback loop with setValue().
+  // Down-sync only on real URL changes (back/forward, deep links). If the
+  // URL has no key at all (params.get returns null), keep whatever the
+  // hook initialised to from localStorage — otherwise navigating back to
+  // a page with no query string would clobber the restored selection.
   useEffect(() => {
-    const next = params.get(name) ?? "";
-    if (next !== value) setValueState(next);
+    const next = params.get(name);
+    if (next !== null && next !== value) setValueState(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params, name]);
 
   const setValue = useCallback((v: string) => {
     setValueState(v);
-    setParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (v === "") next.delete(name);
-      else next.set(name, v);
-      return next;
-    }, { replace: true });
+    // Build the next URLSearchParams from the *live* URL rather than the
+    // captured `params` snapshot — three rapid setValue calls (cascade
+    // reset on /lecturer/exams) need to compose, not clobber each other.
+    const next = new URLSearchParams(
+      typeof window !== "undefined" ? window.location.search : "",
+    );
+    if (v === "") next.delete(name);
+    else next.set(name, v);
+    setParams(next, { replace: true });
     if (typeof window !== "undefined") {
       if (v === "") localStorage.removeItem(storageKey);
       else localStorage.setItem(storageKey, v);
