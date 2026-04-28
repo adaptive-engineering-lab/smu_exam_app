@@ -3,9 +3,8 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Layout } from "../../components/Layout";
 import { Button, Card, EmptyState, PageHeader } from "../../components/ui";
-import { beginAttempt, mySubmissions } from "../../api/attempts";
+import { beginAttempt, listAvailableExams, mySubmissions } from "../../api/attempts";
 import type { StudentSubmission } from "../../api/attempts";
-import { apiFetch } from "../../api/client";
 import type { Exam } from "../../api/types";
 
 export function StudentDashboard() {
@@ -16,8 +15,8 @@ export function StudentDashboard() {
   const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
 
   useEffect(() => {
-    apiFetch<Exam[]>("/student/available-exams")
-      .then(setExams)
+    listAvailableExams()
+      .then((rows) => setExams(rows as unknown as Exam[]))
       .catch(() => setExams([]))
       .finally(() => setLoading(false));
     mySubmissions().then(setSubmissions).catch(() => {});

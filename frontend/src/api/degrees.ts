@@ -1,8 +1,22 @@
-import { apiFetch } from "./client";
+import { supabase } from "../lib/supabase";
 import type { Degree } from "./types";
 
-export const listDegrees = (schoolId: string) =>
-  apiFetch<Degree[]>(`/degrees/by-school/${schoolId}`);
+export const listDegrees = async (schoolId: string): Promise<Degree[]> => {
+  const { data, error } = await supabase
+    .from("degrees")
+    .select("id, school_id, name")
+    .eq("school_id", schoolId)
+    .order("name");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Degree[];
+};
 
-export const createDegree = (school_id: string, name: string) =>
-  apiFetch<Degree>("/degrees", { method: "POST", body: JSON.stringify({ school_id, name }) });
+export const createDegree = async (school_id: string, name: string): Promise<Degree> => {
+  const { data, error } = await supabase
+    .from("degrees")
+    .insert({ school_id, name })
+    .select("id, school_id, name")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Degree;
+};

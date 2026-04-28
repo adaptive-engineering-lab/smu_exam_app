@@ -3,10 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Layout } from "../../components/Layout";
 import { Button, Card, EmptyState, PageHeader } from "../../components/ui";
-import { listSubmissions } from "../../api/attempts";
+import { getAttemptPdfUrl, listSubmissions } from "../../api/attempts";
 import type { SubmissionSummary } from "../../api/attempts";
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
 function buildFilename(s: SubmissionSummary): string {
   const name = (s.student_name || s.student_email.split("@")[0])
@@ -18,21 +16,21 @@ function buildFilename(s: SubmissionSummary): string {
   return `submission_${name}_${date}.pdf`;
 }
 
+// Fetches a 1-hour signed URL from get-attempt-pdf, then streams the PDF
+// into a blob so we can drive a download with the desired filename. A
+// straight <a href={signedUrl} download> would inherit Supabase's
+// Content-Disposition and produce a UUID filename instead.
 async function downloadPdf(s: SubmissionSummary) {
-  const token = localStorage.getItem("access_token");
-  const res = await fetch(`${API_BASE}/attempts/${s.id}/pdf`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    throw new Error("PDF not available");
-  }
+  const url = await getAttemptPdfUrl(s.id);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("PDF not available");
   const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
+  const blobUrl = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
+  a.href = blobUrl;
   a.download = buildFilename(s);
   a.click();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(blobUrl);
 }
 
 export function SubmissionsPage() {
