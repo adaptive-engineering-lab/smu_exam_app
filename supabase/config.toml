@@ -36,8 +36,7 @@ enable_confirmations = false
 enabled = true
 file_size_limit = "50MiB"
 
-[[storage.buckets]]
-name = "submissions"
+[storage.buckets.submissions]
 public = false
 
 [functions.submit-attempt]
