@@ -4,6 +4,7 @@ import { Layout } from "../../components/Layout";
 import { Badge, Button, Card, CardHeader, EmptyState, Input, PageHeader, Select } from "../../components/ui";
 import { listUsers, createUser, deleteUser, setUserPassword, updateUser } from "../../api/users";
 import { getRole } from "../../components/ProtectedRoute";
+import { supabase } from "../../lib/supabase";
 import type { User } from "../../api/types";
 
 type RoleFilter = "all" | "student" | "lecturer" | "admin";
@@ -22,15 +23,9 @@ const TABS: { label: string; value: RoleFilter }[] = [
   { label: "Admins", value: "admin" },
 ];
 
-function getCurrentUserId(): string | null {
-  const token = localStorage.getItem("access_token");
-  if (!token) return null;
-  try { return JSON.parse(atob(token.split(".")[1])).sub ?? null; } catch { return null; }
-}
-
 export function UsersPage() {
   const currentRole = getRole();
-  const currentUserId = getCurrentUserId();
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [tab, setTab] = useState<RoleFilter>("all");
   const [form, setForm] = useState({ email: "", name: "", role: "student", password: "" });
@@ -44,6 +39,7 @@ export function UsersPage() {
 
   useEffect(() => {
     listUsers().then(setUsers).catch(() => toast.error("Failed to load users"));
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
   }, []);
 
   const [search, setSearch] = useState("");
@@ -90,10 +86,16 @@ export function UsersPage() {
   async function handleEditUser(userId: string) {
     setEditLoading(true);
     try {
+      // Self-edit must omit `role`: the admin-user-management edge
+      // function rejects any role field on a self-update with 403
+      // (cannot change your own role). Drop it from the patch entirely
+      // so a no-op self-edit (just renaming yourself) doesn't trip the
+      // server-side guard.
+      const isSelf = userId === currentUserId;
       const updated = await updateUser(userId, {
         name: editForm.name || undefined,
         email: editForm.email || undefined,
-        role: editForm.role || undefined,
+        ...(isSelf ? {} : { role: editForm.role || undefined }),
       });
       setUsers((prev) => prev.map((u) => u.id === userId ? updated : u));
       toast.success("User updated");
