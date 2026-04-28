@@ -1,38 +1,142 @@
-import { apiFetch } from "./client";
+import { supabase } from "../lib/supabase";
 import type { Course, Enrollment } from "./types";
 
 export type StudentSummary = { id: string; email: string; name: string | null };
 
-export const listStudents = () => apiFetch<StudentSummary[]>("/users/students");
+export const listStudents = async (): Promise<StudentSummary[]> => {
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, email, name")
+    .eq("role", "student")
+    .order("email");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as StudentSummary[];
+};
 
-export const listCourses = (degreeId: string) =>
-  apiFetch<Course[]>(`/courses/by-degree/${degreeId}`);
+export const listCourses = async (degreeId: string): Promise<Course[]> => {
+  const { data, error } = await supabase
+    .from("courses")
+    .select("id, degree_id, lecturer_id, name, code")
+    .eq("degree_id", degreeId)
+    .order("code");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Course[];
+};
 
-export const createCourse = (degree_id: string, name: string, code: string, lecturer_id?: string) =>
-  apiFetch<Course>("/courses", {
-    method: "POST",
-    body: JSON.stringify({ degree_id, name, code, lecturer_id }),
-  });
+export const createCourse = async (
+  degree_id: string,
+  name: string,
+  code: string,
+  lecturer_id?: string,
+): Promise<Course> => {
+  const { data, error } = await supabase
+    .from("courses")
+    .insert({ degree_id, name, code, lecturer_id: lecturer_id ?? null })
+    .select("id, degree_id, lecturer_id, name, code")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Course;
+};
 
-export const enrollStudent = (courseId: string, student_id: string) =>
-  apiFetch<Enrollment>(`/courses/${courseId}/enroll`, {
-    method: "POST",
-    body: JSON.stringify({ student_id }),
-  });
+export const enrollStudent = async (
+  courseId: string,
+  student_id: string,
+): Promise<Enrollment> => {
+  const { data, error } = await supabase
+    .from("enrollments")
+    .insert({ course_id: courseId, student_id })
+    .select("id, student_id, course_id")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Enrollment;
+};
 
-export const listEnrollments = (courseId: string) =>
-  apiFetch<StudentSummary[]>(`/courses/${courseId}/enrollments`);
+export const listEnrollments = async (courseId: string): Promise<StudentSummary[]> => {
+  const { data, error } = await supabase
+    .from("enrollments")
+    .select("users:student_id (id, email, name)")
+    .eq("course_id", courseId);
+  if (error) throw new Error(error.message);
+  // PostgREST may return the embed as an object or a 1-element array
+  // depending on schema introspection of the FK; handle both.
+  type Joined = { users: StudentSummary | StudentSummary[] | null };
+  return ((data ?? []) as unknown as Joined[])
+    .map((r) => (Array.isArray(r.users) ? r.users[0] ?? null : r.users))
+    .filter((u): u is StudentSummary => u !== null)
+    .sort((a, b) => a.email.localeCompare(b.email));
+};
 
-export const assignInstructor = (courseId: string, lecturer_id: string | null) =>
-  apiFetch<Course>(`/courses/${courseId}/instructor`, {
-    method: "PATCH",
-    body: JSON.stringify({ lecturer_id }),
-  });
+export const assignInstructor = async (
+  courseId: string,
+  lecturer_id: string | null,
+): Promise<Course> => {
+  const { data, error } = await supabase
+    .from("courses")
+    .update({ lecturer_id })
+    .eq("id", courseId)
+    .select("id, degree_id, lecturer_id, name, code")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Course;
+};
 
-export type BulkEnrolResult = { enrolled: string[]; not_found: string[]; already_enrolled: string[] };
+export type BulkEnrolResult = {
+  enrolled: string[];
+  not_found: string[];
+  already_enrolled: string[];
+};
 
-export const enrollBulk = (courseId: string, emails: string[]) =>
-  apiFetch<BulkEnrolResult>(`/courses/${courseId}/enroll-bulk`, {
-    method: "POST",
-    body: JSON.stringify({ emails }),
-  });
+// Bulk enrol by email. We resolve emails to user ids via PostgREST, then
+// upsert enrollments with on-conflict-ignore. Race-free atomicity isn't
+// guaranteed across the two queries, but conflicts are detected and
+// returned as already_enrolled.
+export const enrollBulk = async (
+  courseId: string,
+  emails: string[],
+): Promise<BulkEnrolResult> => {
+  const cleaned = Array.from(new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean)));
+  if (cleaned.length === 0) {
+    return { enrolled: [], not_found: [], already_enrolled: [] };
+  }
+
+  const { data: matched, error: lookupErr } = await supabase
+    .from("users")
+    .select("id, email")
+    .in("email", cleaned)
+    .eq("role", "student");
+  if (lookupErr) throw new Error(lookupErr.message);
+
+  const matchedRows = (matched ?? []) as { id: string; email: string }[];
+  const matchedEmails = new Set(matchedRows.map((u) => u.email.toLowerCase()));
+  const notFound = cleaned.filter((e) => !matchedEmails.has(e));
+
+  if (matchedRows.length === 0) {
+    return { enrolled: [], not_found: notFound, already_enrolled: [] };
+  }
+
+  // Find which of the matched users are already enrolled.
+  const { data: existing, error: exErr } = await supabase
+    .from("enrollments")
+    .select("student_id")
+    .eq("course_id", courseId)
+    .in("student_id", matchedRows.map((u) => u.id));
+  if (exErr) throw new Error(exErr.message);
+  const alreadyIds = new Set(((existing ?? []) as { student_id: string }[]).map((r) => r.student_id));
+  const toEnrol = matchedRows.filter((u) => !alreadyIds.has(u.id));
+  const alreadyEnrolledEmails = matchedRows
+    .filter((u) => alreadyIds.has(u.id))
+    .map((u) => u.email);
+
+  if (toEnrol.length > 0) {
+    const { error: insErr } = await supabase
+      .from("enrollments")
+      .insert(toEnrol.map((u) => ({ course_id: courseId, student_id: u.id })));
+    if (insErr) throw new Error(insErr.message);
+  }
+
+  return {
+    enrolled: toEnrol.map((u) => u.email),
+    not_found: notFound,
+    already_enrolled: alreadyEnrolledEmails,
+  };
+};

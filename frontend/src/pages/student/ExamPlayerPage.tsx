@@ -81,7 +81,7 @@ export function ExamPlayerPage() {
   );
 
   function setAnswer(questionId: string, payload: Partial<AnswerPayload>) {
-    setAnswers((prev) => ({ ...prev, [questionId]: { question_id: questionId, ...prev[questionId], ...payload } }));
+    setAnswers((prev) => ({ ...prev, [questionId]: { ...prev[questionId], ...payload, question_id: questionId } }));
     markDirty();
   }
 

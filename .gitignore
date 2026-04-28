@@ -1,35 +1,26 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-venv/
-.venv/
-backend/venv/
-backend/.venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-*.db
-
 # Environment
 .env
 *.env
-
-# Azure local state
-.azure/
+*.env.backup
 
 # Node
 frontend/node_modules/
 frontend/dist/
 
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
+
 # Logs
 *.log
 
-# Backend generated artifacts
-backend/submissions/
+# Playwright MCP screenshots
+.playwright-mcp/
+
+# Local agent state (skill installs, lockfiles)
+.agents/
+.claude/skills/
+skills-lock.json
 
 # OS
 .DS_Store
