@@ -6,7 +6,26 @@
       "mcp__supabase__get_publishable_keys",
       "Bash(az account:*)",
       "Bash(az webapp:*)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__list_tables",
+      "mcp__claude_ai_Supabase__get_project",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(curl -fsS --max-time 5 \"https://utixoetrhmqltbodvnot.supabase.co/rest/v1/\" -o /dev/null)",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__claude_ai_Supabase__get_advisors",
+      "mcp__claude_ai_Supabase__deploy_edge_function",
+      "mcp__claude_ai_Supabase__get_publishable_keys",
+      "Bash(curl -sS -i -X OPTIONS https://utixoetrhmqltbodvnot.supabase.co/functions/v1/get-attempt-pdf -H 'Origin: http://localhost:5173' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: authorization, content-type' -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0aXhvZXRyaG1xbHRib2R2bm90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NzgzNjAsImV4cCI6MjA4OTM1NDM2MH0.kCplHUkJZ_KRDpGlIWsxOCLmAfaiEWu3Wtplt44f_Zk')",
+      "Bash(python3 -c ' *)",
+      "Read(//tmp/**)",
+      "Bash(curl -sS -X POST https://utixoetrhmqltbodvnot.supabase.co/functions/v1/__TRACKED_VAR__ -H 'Content-Type: application/json' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0aXhvZXRyaG1xbHRib2R2bm90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NzgzNjAsImV4cCI6MjA4OTM1NDM2MH0.kCplHUkJZ_KRDpGlIWsxOCLmAfaiEWu3Wtplt44f_Zk' -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0aXhvZXRyaG1xbHRib2R2bm90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NzgzNjAsImV4cCI6MjA4OTM1NDM2MH0.kCplHUkJZ_KRDpGlIWsxOCLmAfaiEWu3Wtplt44f_Zk' -d '{\"action\":\"register\",\"email\":\"x\",\"password\":\"x\",\"role\":\"student\",\"attempt_id\":\"x\",\"exam_id\":\"x\",\"csv_text\":\"\"}')",
+      "mcp__claude_ai_Supabase__list_edge_functions",
+      "Bash(git -C /Users/november/Documents/smu_exam_app status)",
+      "Bash(npx --no-install tsc --noEmit)",
+      "Bash(echo \"exit $?\")",
+      "Bash(npx --no-install tsc --noEmit -p tsconfig.json)",
+      "Bash(git rm *)"
     ]
   }
 }
