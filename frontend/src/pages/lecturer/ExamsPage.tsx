@@ -26,6 +26,7 @@ export function ExamsPage() {
   const [selectedCourse, setSelectedCourse] = useState("");
   const [form, setForm] = useState({ title: "", description: "", duration_minutes: 60, academic_year: "", available_from: "", available_until: "", shuffle_questions: false, shuffle_options: false });
   const [yearFilter, setYearFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft">("all");
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -41,7 +42,7 @@ export function ExamsPage() {
     listCourses(selectedDegree).then(setCourses);
   }, [selectedDegree]);
   useEffect(() => {
-    if (!selectedCourse) { setExams([]); setShowForm(false); setYearFilter("all"); return; }
+    if (!selectedCourse) { setExams([]); setShowForm(false); setYearFilter("all"); setStatusFilter("all"); return; }
     listExams(selectedCourse).then(setExams);
   }, [selectedCourse]);
 
@@ -127,7 +128,14 @@ export function ExamsPage() {
   }
 
   const academicYears = [...new Set(exams.map((e) => e.academic_year).filter(Boolean) as string[])].sort().reverse();
-  const visibleExams = yearFilter === "all" ? exams : exams.filter((e) => e.academic_year === yearFilter);
+  const publishedCount = exams.filter((e) => e.is_published).length;
+  const draftCount = exams.length - publishedCount;
+  const visibleExams = exams.filter((e) => {
+    if (yearFilter !== "all" && e.academic_year !== yearFilter) return false;
+    if (statusFilter === "published" && !e.is_published) return false;
+    if (statusFilter === "draft" && e.is_published) return false;
+    return true;
+  });
 
   return (
     <Layout>
@@ -206,23 +214,41 @@ export function ExamsPage() {
       )}
 
       <Card padding={false}>
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-4">
+        <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h2 className="text-base font-semibold text-slate-900 shrink-0">
             {selectedCourse ? `Exams (${visibleExams.length})` : "Exams"}
           </h2>
-          {selectedCourse && academicYears.length > 0 && (
-            <div className="flex gap-1 flex-wrap">
-              <button
-                onClick={() => setYearFilter("all")}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${yearFilter === "all" ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-100"}`}
-              >All years</button>
-              {academicYears.map((y) => (
+          {selectedCourse && exams.length > 0 && (
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <div className="flex gap-1">
                 <button
-                  key={y}
-                  onClick={() => setYearFilter(y)}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${yearFilter === y ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-100"}`}
-                >{y}</button>
-              ))}
+                  onClick={() => setStatusFilter("all")}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${statusFilter === "all" ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}
+                >All ({exams.length})</button>
+                <button
+                  onClick={() => setStatusFilter("published")}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${statusFilter === "published" ? "bg-emerald-600 text-white" : "text-slate-500 hover:bg-slate-100"}`}
+                >Published ({publishedCount})</button>
+                <button
+                  onClick={() => setStatusFilter("draft")}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${statusFilter === "draft" ? "bg-amber-600 text-white" : "text-slate-500 hover:bg-slate-100"}`}
+                >Drafts ({draftCount})</button>
+              </div>
+              {academicYears.length > 0 && (
+                <div className="flex gap-1 flex-wrap">
+                  <button
+                    onClick={() => setYearFilter("all")}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${yearFilter === "all" ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-100"}`}
+                  >All years</button>
+                  {academicYears.map((y) => (
+                    <button
+                      key={y}
+                      onClick={() => setYearFilter(y)}
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${yearFilter === y ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-100"}`}
+                    >{y}</button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
